@@ -68,4 +68,44 @@ core::Message OpenAIChat::invoke(const std::vector<core::Message>& messages) {
     return detail::parse_openai_message(parsed["choices"][0]["message"]);
 }
 
+void OpenAIChat::stream(const std::vector<core::Message>& messages, const StreamCallback& on_chunk) {
+    json payload_messages = json::array();
+    for (const auto& message : messages) {
+        payload_messages.push_back(detail::message_to_openai_json(message));
+    }
+
+    json body{
+        {"model", config_.model},
+        {"messages", payload_messages},
+        {"temperature", config_.temperature},
+        {"stream", true},
+    };
+    if (config_.max_tokens) {
+        body["max_tokens"] = *config_.max_tokens;
+    }
+    if (tools_ && !tools_->all().empty()) {
+        body["tools"] = tools_->to_openai_tools_json();
+    }
+
+    detail::OpenAiStreamParser parser;
+
+    cpr::Session session;
+    session.SetUrl(cpr::Url{config_.base_url + "/chat/completions"});
+    session.SetHeader(
+        cpr::Header{{"Authorization", "Bearer " + config_.api_key}, {"Content-Type", "application/json"}});
+    session.SetBody(cpr::Body{body.dump()});
+    session.SetWriteCallback(cpr::WriteCallback([&](std::string_view data, intptr_t) -> bool {
+        return parser.feed(data, [&](const std::string& delta) { on_chunk(llm::StreamChunk{delta, false, {}}); });
+    }));
+
+    cpr::Response response = session.Post();
+
+    if (response.status_code != 200) {
+        throw std::runtime_error("OpenAIChat: streaming request failed (HTTP " + std::to_string(response.status_code) +
+                                  ")");
+    }
+
+    on_chunk(llm::StreamChunk{"", true, parser.finish()});
+}
+
 } // namespace langchain::providers

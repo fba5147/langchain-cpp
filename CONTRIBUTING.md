@@ -59,19 +59,42 @@ fully offline.
 The [README's roadmap](README.md#roadmap) tracks feature milestones in build order. Beyond that,
 concrete things worth doing:
 
-- **MCP client/server support** — the next unimplemented roadmap item, and likely the most
-  differentiated piece relative to other C++ LLM libraries.
-- **`RunnableParallel` / passthrough combinator** — needed to make `retriever | prompt | model |
-  parser` work as a single pipe chain (see the RAG section of the README for why it currently doesn't).
-- **Streaming** — `ChatModel::invoke` is currently all-or-nothing; a `stream()` returning incremental
-  chunks (naturally expressible with C++20 coroutines) is unimplemented.
+Roadmap item 6 (README) is a lettered list of gaps identified against official LangChain
+(Python)/LangChain.js; parts 1 (`RunnableParallel`/`RunnablePassthrough`/`RunnableBranch`), 2
+(`ChatModel::stream()`), 3 (callbacks), 4 (`CachingChatModel`), 5 (`ChatModelWithHistory`), 6 (few-shot
+prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), and 8 (`Message::images`)
+are done, so parts 9-10 are the open ones, roughly in priority order:
+
+- **MCP client/server support** (part 9) — confirmed as an official package
+  (`@langchain/mcp-adapters`), likely the most differentiated piece relative to other C++ LLM libraries.
+- **A LangSmith-equivalent tracing backend** — part 3 shipped the hook points
+  (`CallbackHandler`/`CallbackManager`/`CallbackingChatModel`/`CallbackingTool`) and a console printer,
+  but nothing that persists/visualizes traces. A `CallbackHandler` that writes structured JSON lines
+  (or exports to an existing tracing system) would build directly on that.
+- **Streaming for `AnthropicChat`/`GeminiChat`** — only `OpenAIChat`/`AzureOpenAIChat` got real
+  incremental streaming (part 2); the other two still use `ChatModel::stream()`'s default (one
+  synthesized final chunk), same caveat as their non-streaming tool-calling below.
 - **Live coverage for `AnthropicChat` tool-calling and `GeminiChat`** — both are written to spec
-  (`GeminiChat`'s pure request/response conversion has unit tests, see `tests/test_gemini_wire_format.cpp`)
-  but neither has had the equivalent of the `ollama_demo.cpp` live smoke test that `OpenAIChat` got —
-  no Anthropic/Google credentials were available while building this. If you have one, running
-  `examples/more_providers_demo.cpp` (Gemini) or a quick Anthropic tool-calling script against a real
-  key and reporting back what broke is high-value.
-- **A real vector store integration** (FAISS, Qdrant, pgvector, ...) alongside `InMemoryVectorStore`.
+  (pure request/response conversion has unit tests for both now — `tests/test_gemini_wire_format.cpp`
+  and `tests/test_anthropic_wire_format.cpp`) but neither has had the equivalent of the
+  `ollama_demo.cpp` live smoke test that `OpenAIChat` got — no Anthropic/Google credentials were
+  available while building this. If you have one, running `examples/more_providers_demo.cpp` (Gemini)
+  or a quick Anthropic tool-calling script against a real key and reporting back what broke is
+  high-value.
+- **A real vector store integration** (FAISS, Qdrant, pgvector, ...) alongside `InMemoryVectorStore`
+  (part 10).
+- **Image support for `AnthropicChat`/`GeminiChat`** — both throw on `Message::images` today (part 8
+  shipped `OpenAIChat`/`AzureOpenAIChat` support only); wiring up their image content-block formats is
+  a natural, self-contained follow-up.
+- **More `ExampleSelector` implementations** (length-based, max-marginal-relevance) alongside
+  `SemanticSimilarityExampleSelector` (part 6).
+- **Model-aware rate limiting** (token/cost-based, not just requests-per-second) alongside
+  `RateLimiter` (part 7) — needs per-provider tokenization, which is its own scoping question.
+- **A persistent `ChatModelCache`** (file/SQL/Redis-backed) alongside `InMemoryChatModelCache` (part 4
+  shipped the interface and an in-memory implementation, not persistence across process restarts).
+- **A SQL/Redis-backed `ChatMessageHistory`** alongside `InMemoryChatMessageHistory`/
+  `FileChatMessageHistory` (part 5) — useful once a conversation needs to be shared across processes
+  rather than owned by whichever process has the file open.
 - **CI matrix breadth** — the current workflow builds on Linux and macOS; a Windows/MSVC leg would
   catch platform-specific bugs (case-sensitive includes, `<filesystem>` quirks, etc.).
 

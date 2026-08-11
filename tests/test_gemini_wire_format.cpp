@@ -62,6 +62,11 @@ TEST(MessagesToGeminiRequest, ToolResultBecomesFunctionResponseWithRecoveredName
     EXPECT_EQ(function_response["response"]["result"], 3);
 }
 
+TEST(MessagesToGeminiRequest, ThrowsWhenAnyMessageHasImages) {
+    auto message = Message::user_with_images("what's this?", {ImageContent::from_url("https://example.com/x.png")});
+    EXPECT_THROW(messages_to_gemini_request({message}), std::runtime_error);
+}
+
 TEST(ParseGeminiMessage, PlainTextResponseBecomesAssistantMessage) {
     nlohmann::json response = {
         {"candidates", {{{"content", {{"parts", {{{"text", "hi there"}}}}}}}}},

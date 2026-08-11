@@ -1,6 +1,7 @@
 #include "langchain/providers/mock/mock_chat.hpp"
 
 #include <algorithm>
+#include <sstream>
 
 namespace langchain::providers {
 
@@ -23,6 +24,22 @@ core::Message MockChat::invoke(const std::vector<core::Message>& messages) {
 
 std::shared_ptr<llm::ChatModel> MockChat::bind_tools(std::shared_ptr<tools::ToolRegistry>) {
     return std::make_shared<MockChat>(*this);
+}
+
+void MockChat::stream(const std::vector<core::Message>& messages, const StreamCallback& on_chunk) {
+    core::Message result = invoke(messages);
+
+    if (!result.content.empty()) {
+        std::istringstream stream(result.content);
+        std::string word;
+        bool first = true;
+        while (stream >> word) {
+            on_chunk(llm::StreamChunk{first ? word : " " + word, false, {}});
+            first = false;
+        }
+    }
+
+    on_chunk(llm::StreamChunk{"", true, result});
 }
 
 } // namespace langchain::providers

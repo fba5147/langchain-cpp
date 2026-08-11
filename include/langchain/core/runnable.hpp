@@ -4,6 +4,8 @@
 #include <future>
 #include <memory>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace langchain::core {
@@ -67,6 +69,70 @@ template <typename Input, typename Output>
 std::shared_ptr<RunnableLambda<Input, Output>> make_runnable_lambda(std::function<Output(const Input&)> fn) {
     return std::make_shared<RunnableLambda<Input, Output>>(std::move(fn));
 }
+
+// Passes its input through unchanged. Useful inside RunnableParallel to
+// carry the original input alongside a derived branch -- e.g. in a RAG
+// chain, the question itself needs to reach the prompt alongside the
+// retrieved-and-formatted context.
+template <typename T>
+class RunnablePassthrough : public Runnable<T, T> {
+public:
+    T invoke(const T& input) override { return input; }
+};
+
+// Runs several named branches against the same input and collects their
+// results into a map keyed by branch name. All branches must share the
+// same Output type -- a real constraint C++'s static typing imposes that
+// Python's dynamically-typed dict doesn't have -- but with Output =
+// std::string, this class's own OutputType is exactly
+// unordered_map<string, string>, i.e. exactly PromptValues (see
+// prompts/prompt_template.hpp). So `RunnableParallel<Input, std::string>`
+// composes directly via operator| into a PromptTemplate/ChatPromptTemplate,
+// which is precisely what makes a one-line
+// `parallel | prompt | model | parser` RAG chain possible.
+template <typename Input, typename Output>
+class RunnableParallel : public Runnable<Input, std::unordered_map<std::string, Output>> {
+public:
+    using Branches = std::unordered_map<std::string, std::shared_ptr<Runnable<Input, Output>>>;
+
+    explicit RunnableParallel(Branches branches) : branches_(std::move(branches)) {}
+
+    std::unordered_map<std::string, Output> invoke(const Input& input) override {
+        std::unordered_map<std::string, Output> result;
+        for (const auto& [key, branch] : branches_) {
+            result[key] = branch->invoke(input);
+        }
+        return result;
+    }
+
+private:
+    Branches branches_;
+};
+
+// Routes to the first branch whose predicate matches the input, falling
+// back to `default_branch` if none do.
+template <typename Input, typename Output>
+class RunnableBranch : public Runnable<Input, Output> {
+public:
+    using Predicate = std::function<bool(const Input&)>;
+    using Branch = std::pair<Predicate, std::shared_ptr<Runnable<Input, Output>>>;
+
+    RunnableBranch(std::vector<Branch> branches, std::shared_ptr<Runnable<Input, Output>> default_branch)
+        : branches_(std::move(branches)), default_branch_(std::move(default_branch)) {}
+
+    Output invoke(const Input& input) override {
+        for (const auto& [predicate, branch] : branches_) {
+            if (predicate(input)) {
+                return branch->invoke(input);
+            }
+        }
+        return default_branch_->invoke(input);
+    }
+
+private:
+    std::vector<Branch> branches_;
+    std::shared_ptr<Runnable<Input, Output>> default_branch_;
+};
 
 // Generic `first | second` composition. Works for any two shared_ptrs to
 // Runnable subclasses (not just Runnable<Input,Output> itself) by reading

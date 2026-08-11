@@ -1,29 +1,11 @@
 #include "langchain/rag/vectorstores/in_memory_vector_store.hpp"
 
+#include "langchain/core/similarity.hpp"
+
 #include <algorithm>
-#include <cmath>
 #include <numeric>
 
 namespace langchain::rag {
-
-namespace {
-
-float cosine_similarity(const std::vector<float>& a, const std::vector<float>& b) {
-    double dot = 0.0;
-    double norm_a = 0.0;
-    double norm_b = 0.0;
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        dot += static_cast<double>(a[i]) * b[i];
-        norm_a += static_cast<double>(a[i]) * a[i];
-        norm_b += static_cast<double>(b[i]) * b[i];
-    }
-    if (norm_a == 0.0 || norm_b == 0.0) {
-        return 0.0f;
-    }
-    return static_cast<float>(dot / (std::sqrt(norm_a) * std::sqrt(norm_b)));
-}
-
-} // namespace
 
 InMemoryVectorStore::InMemoryVectorStore(std::shared_ptr<Embeddings> embeddings) : embeddings_(std::move(embeddings)) {}
 
@@ -47,7 +29,7 @@ std::vector<core::Document> InMemoryVectorStore::similarity_search(const std::st
     std::iota(indices.begin(), indices.end(), 0);
 
     std::sort(indices.begin(), indices.end(), [&](std::size_t a, std::size_t b) {
-        return cosine_similarity(query_vector, vectors_[a]) > cosine_similarity(query_vector, vectors_[b]);
+        return core::cosine_similarity(query_vector, vectors_[a]) > core::cosine_similarity(query_vector, vectors_[b]);
     });
 
     std::size_t result_count = std::min(k, indices.size());

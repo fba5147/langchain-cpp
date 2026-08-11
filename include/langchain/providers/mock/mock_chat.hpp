@@ -30,6 +30,11 @@ public:
     // fixed response / function / script, not by what tools are offered.
     std::shared_ptr<llm::ChatModel> bind_tools(std::shared_ptr<tools::ToolRegistry> registry) override;
 
+    // Simulates incremental streaming (word by word) of whatever invoke()
+    // would have returned, so code that consumes stream() can be tested
+    // offline without a real provider.
+    void stream(const std::vector<core::Message>& messages, const StreamCallback& on_chunk) override;
+
 private:
     ResponseFn fn_;
     std::vector<core::Message> scripted_responses_;

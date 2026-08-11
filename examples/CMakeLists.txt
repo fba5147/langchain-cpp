@@ -22,3 +22,21 @@ target_link_libraries(ollama_demo PRIVATE langchain::core)
 
 add_executable(more_providers_demo more_providers_demo.cpp)
 target_link_libraries(more_providers_demo PRIVATE langchain::core)
+
+add_executable(callbacks_demo callbacks_demo.cpp)
+target_link_libraries(callbacks_demo PRIVATE langchain::core)
+
+add_executable(caching_demo caching_demo.cpp)
+target_link_libraries(caching_demo PRIVATE langchain::core)
+
+add_executable(chat_history_demo chat_history_demo.cpp)
+target_link_libraries(chat_history_demo PRIVATE langchain::core)
+
+add_executable(few_shot_demo few_shot_demo.cpp)
+target_link_libraries(few_shot_demo PRIVATE langchain::core)
+
+add_executable(rate_limit_demo rate_limit_demo.cpp)
+target_link_libraries(rate_limit_demo PRIVATE langchain::core)
+
+add_executable(multimodal_demo multimodal_demo.cpp)
+target_link_libraries(multimodal_demo PRIVATE langchain::core)

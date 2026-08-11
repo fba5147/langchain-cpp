@@ -15,12 +15,27 @@ find_package(cpr CONFIG REQUIRED)
 add_library(langchain_core
     src/core/message.cpp
     src/core/dotenv.cpp
+    src/core/callbacks.cpp
+    src/core/similarity.cpp
+    src/callbacks/console_callback_handler.cpp
+    src/callbacks/callbacking_chat_model.cpp
+    src/callbacks/callbacking_tool.cpp
+    src/llm/in_memory_chat_model_cache.cpp
+    src/llm/caching_chat_model.cpp
+    src/llm/in_memory_chat_message_history.cpp
+    src/llm/file_chat_message_history.cpp
+    src/llm/chat_model_with_history.cpp
+    src/llm/rate_limiter.cpp
+    src/llm/rate_limited_chat_model.cpp
     src/prompts/prompt_template.cpp
     src/prompts/chat_prompt_template.cpp
+    src/prompts/few_shot_prompt_template.cpp
+    src/prompts/semantic_similarity_example_selector.cpp
     src/providers/mock/mock_chat.cpp
     src/providers/openai/openai_wire_format.cpp
     src/providers/openai/openai_chat.cpp
     src/providers/openai/openai_compatible_presets.cpp
+    src/providers/anthropic/anthropic_wire_format.cpp
     src/providers/anthropic/anthropic_chat.cpp
     src/providers/azure/azure_openai_chat.cpp
     src/providers/google/gemini_wire_format.cpp
@@ -37,6 +52,7 @@ add_library(langchain_core
     src/rag/vectorstores/vector_store.cpp
     src/rag/vectorstores/in_memory_vector_store.cpp
     src/rag/retrievers/retriever.cpp
+    src/rag/format_documents.cpp
 )
 add_library(langchain::core ALIAS langchain_core)
 

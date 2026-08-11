@@ -32,6 +32,7 @@ public:
     core::Message invoke(const std::vector<core::Message>& messages) override;
     std::string model_name() const override { return config_.deployment; }
     std::shared_ptr<llm::ChatModel> bind_tools(std::shared_ptr<tools::ToolRegistry> registry) override;
+    void stream(const std::vector<core::Message>& messages, const StreamCallback& on_chunk) override;
 
 private:
     AzureOpenAIConfig config_;

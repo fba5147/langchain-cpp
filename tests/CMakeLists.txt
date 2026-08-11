@@ -14,7 +14,18 @@ add_executable(langchain_tests
     test_vector_store.cpp
     test_dotenv.cpp
     test_gemini_wire_format.cpp
+    test_openai_message_wire_format.cpp
+    test_anthropic_wire_format.cpp
     test_azure_url.cpp
+    test_format_documents.cpp
+    test_openai_stream_parser.cpp
+    test_callbacks.cpp
+    test_caching_chat_model.cpp
+    test_chat_message_history.cpp
+    test_similarity.cpp
+    test_few_shot_prompt_template.cpp
+    test_output_fixing_parser.cpp
+    test_rate_limiter.cpp
 )
 target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest::gtest_main)
 

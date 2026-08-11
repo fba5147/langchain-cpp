@@ -45,6 +45,16 @@ int main() {
     core::Message reply = chat->invoke({core::Message::user("Say hello in exactly 3 words.")});
     std::cout << reply.content << "\n\n";
 
+    std::cout << "--- streaming ---\n";
+    chat->stream({core::Message::user("Count from 1 to 5.")}, [](const llm::StreamChunk& chunk) {
+        if (!chunk.is_final) {
+            std::cout << chunk.delta << std::flush;
+        } else {
+            std::cout << "\n[stream done -- assembled content matches: "
+                       << (chunk.message.content.size() > 0 ? "yes" : "no") << "]\n\n";
+        }
+    });
+
     std::cout << "--- agent with a tool ---\n";
     auto tool_registry = std::make_shared<tools::ToolRegistry>();
     tool_registry->add(std::make_shared<tools::FunctionTool>(
@@ -73,6 +83,19 @@ int main() {
     agents::AgentExecutor agent(chat, tool_registry);
     core::Message answer = agent.run("What is 123 * 456? Use the calculator tool.");
     std::cout << answer.content << "\n\n";
+
+    std::cout << "--- streaming a tool call ---\n";
+    auto tool_bound_chat = chat->bind_tools(tool_registry);
+    tool_bound_chat->stream({core::Message::user("What is 9 * 9? Use the calculator tool.")},
+                             [](const llm::StreamChunk& chunk) {
+                                 if (chunk.is_final && chunk.message.has_tool_calls()) {
+                                     std::cout << "assembled tool call: " << chunk.message.tool_calls[0].tool_name
+                                               << "(" << chunk.message.tool_calls[0].arguments.dump() << ")\n\n";
+                                 } else if (chunk.is_final) {
+                                     std::cout << "(no tool call; model answered directly: " << chunk.message.content
+                                               << ")\n\n";
+                                 }
+                             });
 
     std::cout << "--- embeddings ---\n";
     rag::OpenAIEmbeddings embeddings(rag::OpenAIEmbeddingsConfig{

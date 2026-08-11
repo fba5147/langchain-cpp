@@ -18,6 +18,10 @@ GeminiRequest messages_to_gemini_request(const std::vector<core::Message>& messa
     std::unordered_map<std::string, std::string> call_id_to_name;
 
     for (const auto& message : messages) {
+        if (!message.images.empty()) {
+            throw std::runtime_error("GeminiChat: image content is not yet supported by this provider implementation");
+        }
+
         if (message.role == core::MessageRole::System) {
             if (!request.system_instruction.empty()) {
                 request.system_instruction += "\n";

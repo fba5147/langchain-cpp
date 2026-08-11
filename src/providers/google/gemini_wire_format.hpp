@@ -25,6 +25,10 @@ struct GeminiRequest {
 // lets AgentExecutor and this conversion agree on which tool_result
 // answers which call within a single invoke() call), but is synthesized
 // here rather than provided by the API, and never sent over the wire.
+//
+// Throws std::runtime_error if any message's `images` is non-empty --
+// GeminiChat doesn't yet encode image content into its wire format, so
+// failing loudly beats silently dropping the image.
 GeminiRequest messages_to_gemini_request(const std::vector<core::Message>& messages);
 
 core::Message parse_gemini_message(const nlohmann::json& response_json);
