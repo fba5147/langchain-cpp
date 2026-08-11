@@ -11,6 +11,7 @@ namespace langchain::providers {
 using json = nlohmann::json;
 
 namespace {
+
 std::string resolve_api_key(std::string configured) {
     if (!configured.empty()) {
         return configured;
@@ -20,15 +21,78 @@ std::string resolve_api_key(std::string configured) {
     }
     throw std::runtime_error("AnthropicChat: no api_key provided and ANTHROPIC_API_KEY is not set");
 }
+
+// Anthropic has no "tool" role: a tool result is sent back as a "user"
+// message containing a tool_result content block. An assistant message
+// that requests tool calls must likewise use an array of content blocks
+// (text + tool_use) instead of a plain string.
+json message_to_anthropic_json(const core::Message& message) {
+    if (message.role == core::MessageRole::Tool) {
+        return json{
+            {"role", "user"},
+            {"content", json::array({json{
+                            {"type", "tool_result"},
+                            {"tool_use_id", message.tool_call_id},
+                            {"content", message.content},
+                        }})},
+        };
+    }
+
+    if (!message.tool_calls.empty()) {
+        json blocks = json::array();
+        if (!message.content.empty()) {
+            blocks.push_back({{"type", "text"}, {"text", message.content}});
+        }
+        for (const auto& call : message.tool_calls) {
+            blocks.push_back({
+                {"type", "tool_use"},
+                {"id", call.id},
+                {"name", call.tool_name},
+                {"input", call.arguments},
+            });
+        }
+        return json{{"role", core::to_api_role(message.role)}, {"content", blocks}};
+    }
+
+    return json{{"role", core::to_api_role(message.role)}, {"content", message.content}};
+}
+
+core::Message parse_anthropic_message(const json& parsed) {
+    std::string text;
+    std::vector<core::ToolCall> calls;
+
+    for (const auto& block : parsed.at("content")) {
+        std::string type = block.value("type", "");
+        if (type == "text") {
+            text += block.value("text", "");
+        } else if (type == "tool_use") {
+            core::ToolCall call;
+            call.id = block.at("id").get<std::string>();
+            call.tool_name = block.at("name").get<std::string>();
+            call.arguments = block.value("input", json::object());
+            calls.push_back(std::move(call));
+        }
+    }
+
+    if (!calls.empty()) {
+        return core::Message::assistant_tool_calls(std::move(calls), text);
+    }
+    return core::Message::assistant(text);
+}
+
 } // namespace
 
 AnthropicChat::AnthropicChat(AnthropicConfig config) : config_(std::move(config)) {
     config_.api_key = resolve_api_key(std::move(config_.api_key));
 }
 
+std::shared_ptr<llm::ChatModel> AnthropicChat::bind_tools(std::shared_ptr<tools::ToolRegistry> registry) {
+    auto bound = std::make_shared<AnthropicChat>(*this);
+    bound->tools_ = std::move(registry);
+    return bound;
+}
+
 core::Message AnthropicChat::invoke(const std::vector<core::Message>& messages) {
-    // Anthropic takes system prompts as a separate top-level field, not as
-    // a message with role "system".
     std::string system_prompt;
     json payload_messages = json::array();
     for (const auto& message : messages) {
@@ -38,7 +102,7 @@ core::Message AnthropicChat::invoke(const std::vector<core::Message>& messages) 
             }
             system_prompt += message.content;
         } else {
-            payload_messages.push_back({{"role", core::to_api_role(message.role)}, {"content", message.content}});
+            payload_messages.push_back(message_to_anthropic_json(message));
         }
     }
 
@@ -50,6 +114,9 @@ core::Message AnthropicChat::invoke(const std::vector<core::Message>& messages) 
     };
     if (!system_prompt.empty()) {
         body["system"] = system_prompt;
+    }
+    if (tools_ && !tools_->all().empty()) {
+        body["tools"] = tools_->to_anthropic_tools_json();
     }
 
     cpr::Response response = cpr::Post(cpr::Url{config_.base_url + "/messages"},
@@ -63,8 +130,7 @@ core::Message AnthropicChat::invoke(const std::vector<core::Message>& messages) 
                                   "): " + response.text);
     }
 
-    json parsed = json::parse(response.text);
-    return core::Message::assistant(parsed["content"][0]["text"].get<std::string>());
+    return parse_anthropic_message(json::parse(response.text));
 }
 
 } // namespace langchain::providers

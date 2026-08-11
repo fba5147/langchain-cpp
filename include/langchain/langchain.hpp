@@ -9,6 +9,8 @@
 #include "langchain/core/result.hpp"
 #include "langchain/core/runnable.hpp"
 
+#include "langchain/agents/agent_executor.hpp"
+
 #include "langchain/llm/chat_model.hpp"
 
 #include "langchain/parsers/json_parser.hpp"

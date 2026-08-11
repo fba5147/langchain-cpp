@@ -21,6 +21,7 @@ add_library(langchain_core
     src/parsers/json_parser.cpp
     src/tools/function_tool.cpp
     src/tools/tool_registry.cpp
+    src/agents/agent_executor.cpp
 )
 add_library(langchain::core ALIAS langchain_core)
 

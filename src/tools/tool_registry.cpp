@@ -34,4 +34,16 @@ nlohmann::json ToolRegistry::to_openai_tools_json() const {
     return tools;
 }
 
+nlohmann::json ToolRegistry::to_anthropic_tools_json() const {
+    nlohmann::json tools = nlohmann::json::array();
+    for (const auto& tool : tools_) {
+        tools.push_back({
+            {"name", tool->name()},
+            {"description", tool->description()},
+            {"input_schema", tool->parameters_schema()},
+        });
+    }
+    return tools;
+}
+
 } // namespace langchain::tools

@@ -24,9 +24,11 @@ public:
 
     core::Message invoke(const std::vector<core::Message>& messages) override;
     std::string model_name() const override { return config_.model; }
+    std::shared_ptr<llm::ChatModel> bind_tools(std::shared_ptr<tools::ToolRegistry> registry) override;
 
 private:
     AnthropicConfig config_;
+    std::shared_ptr<tools::ToolRegistry> tools_;
 };
 
 } // namespace langchain::providers

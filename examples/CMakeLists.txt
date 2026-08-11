@@ -9,3 +9,6 @@ target_link_libraries(structured_output PRIVATE langchain::core)
 
 add_executable(tools_demo tools_demo.cpp)
 target_link_libraries(tools_demo PRIVATE langchain::core)
+
+add_executable(agent_demo agent_demo.cpp)
+target_link_libraries(agent_demo PRIVATE langchain::core)

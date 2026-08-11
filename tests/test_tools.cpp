@@ -61,3 +61,16 @@ TEST(ToolRegistry, RendersOpenAiToolSchema) {
     EXPECT_EQ(schema[0]["function"]["description"], "adds two numbers");
     EXPECT_EQ(schema[0]["function"]["parameters"]["type"], "object");
 }
+
+TEST(ToolRegistry, RendersAnthropicToolSchema) {
+    ToolRegistry registry;
+    registry.add(std::make_shared<FunctionTool>(
+        "add", "adds two numbers", [](const nlohmann::json&) -> nlohmann::json { return 0; },
+        nlohmann::json{{"type", "object"}}));
+
+    auto schema = registry.to_anthropic_tools_json();
+    ASSERT_EQ(schema.size(), 1u);
+    EXPECT_EQ(schema[0]["name"], "add");
+    EXPECT_EQ(schema[0]["description"], "adds two numbers");
+    EXPECT_EQ(schema[0]["input_schema"]["type"], "object");
+}

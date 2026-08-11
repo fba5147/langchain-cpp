@@ -2,7 +2,10 @@
 
 #include "langchain/core/message.hpp"
 #include "langchain/core/runnable.hpp"
+#include "langchain/tools/tool_registry.hpp"
 
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,6 +19,16 @@ public:
     ~ChatModel() override = default;
 
     virtual std::string model_name() const = 0;
+
+    // Returns a copy of this model that offers `tools` to the LLM as
+    // function-calling candidates on every subsequent invoke(); a reply
+    // that wants to call one comes back as Message::assistant_tool_calls.
+    // Providers that don't support tool calling can leave the default,
+    // which throws.
+    virtual std::shared_ptr<ChatModel> bind_tools(std::shared_ptr<tools::ToolRegistry> registry) {
+        (void)registry;
+        throw std::logic_error(model_name() + " does not support tool calling");
+    }
 };
 
 } // namespace langchain::llm

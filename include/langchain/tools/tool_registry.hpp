@@ -23,6 +23,9 @@ public:
     // [{"type": "function", "function": {"name", "description", "parameters"}}, ...]
     nlohmann::json to_openai_tools_json() const;
 
+    // [{"name", "description", "input_schema"}, ...]
+    nlohmann::json to_anthropic_tools_json() const;
+
 private:
     std::vector<std::shared_ptr<Tool>> tools_;
     std::unordered_map<std::string, std::shared_ptr<Tool>> by_name_;
