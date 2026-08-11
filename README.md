@@ -126,9 +126,12 @@ explicitly, then feed its output into the prompt's `context` variable.
 See `examples/mock_chain.cpp` and `examples/structured_output.cpp` for fully offline versions of the
 first two snippets above (no API key needed), `examples/basic_chat.cpp` for a real provider call,
 `examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema,
-`examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set), and
+`examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set),
 `examples/rag_demo.cpp` for the full RAG pipeline (offline with `MockEmbeddings`, or live with
-`OPENAI_API_KEY` set).
+`OPENAI_API_KEY` set), and `examples/ollama_demo.cpp` for `OpenAIChat`/`OpenAIEmbeddings` pointed at a
+local [Ollama](https://ollama.com) server instead of `api.openai.com` (chat, tool-calling agent loop,
+and embeddings, all verified end-to-end against a real `llama3.2` + `nomic-embed-text` server — see
+note below on local-model tool-calling reliability).
 
 ## Building
 
@@ -149,9 +152,25 @@ Run the examples:
 ./build/examples/tools_demo
 ./build/examples/agent_demo
 ./build/examples/rag_demo
+./build/examples/ollama_demo   # requires `ollama serve` + `ollama pull llama3.2 nomic-embed-text`
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 ```
+
+### Verified against a real server (Ollama)
+
+`OpenAIChat`/`OpenAIEmbeddings` were run against a local Ollama server (`llama3.2` +
+`nomic-embed-text`), not just mocked — plain chat, the full tool-calling round trip (request →
+`tool_calls` → executing the tool → feeding `tool_result` back → final answer), and embeddings all
+came back in the exact shape the code expects. One real finding from that testing: unlike OpenAI's
+constrained-decoding function calling, small local models don't reliably honor a `"type": "number"`
+JSON schema for tool arguments — llama3.2 sometimes sent `"123"` (a string) instead of `123`. The
+library's behavior was already correct here (`FunctionTool::call` catches the resulting type error and
+reports it back to the model as a `Result` error instead of crashing), but it's a good reminder that
+**tool implementations should coerce loosely-typed arguments defensively** rather than assume a
+provider enforced its own schema — `examples/ollama_demo.cpp`'s calculator does this.
+`AnthropicChat`'s tool-calling wire format is written to the same spec but hasn't had the equivalent
+live smoke test in this environment.
 
 ## Roadmap
 
