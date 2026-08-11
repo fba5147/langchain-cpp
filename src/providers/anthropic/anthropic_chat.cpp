@@ -1,0 +1,70 @@
+#include "langchain/providers/anthropic/anthropic_chat.hpp"
+
+#include <cpr/cpr.h>
+#include <nlohmann/json.hpp>
+
+#include <cstdlib>
+#include <stdexcept>
+
+namespace langchain::providers {
+
+using json = nlohmann::json;
+
+namespace {
+std::string resolve_api_key(std::string configured) {
+    if (!configured.empty()) {
+        return configured;
+    }
+    if (const char* env = std::getenv("ANTHROPIC_API_KEY")) {
+        return env;
+    }
+    throw std::runtime_error("AnthropicChat: no api_key provided and ANTHROPIC_API_KEY is not set");
+}
+} // namespace
+
+AnthropicChat::AnthropicChat(AnthropicConfig config) : config_(std::move(config)) {
+    config_.api_key = resolve_api_key(std::move(config_.api_key));
+}
+
+core::Message AnthropicChat::invoke(const std::vector<core::Message>& messages) {
+    // Anthropic takes system prompts as a separate top-level field, not as
+    // a message with role "system".
+    std::string system_prompt;
+    json payload_messages = json::array();
+    for (const auto& message : messages) {
+        if (message.role == core::MessageRole::System) {
+            if (!system_prompt.empty()) {
+                system_prompt += "\n";
+            }
+            system_prompt += message.content;
+        } else {
+            payload_messages.push_back({{"role", core::to_api_role(message.role)}, {"content", message.content}});
+        }
+    }
+
+    json body{
+        {"model", config_.model},
+        {"messages", payload_messages},
+        {"max_tokens", config_.max_tokens},
+        {"temperature", config_.temperature},
+    };
+    if (!system_prompt.empty()) {
+        body["system"] = system_prompt;
+    }
+
+    cpr::Response response = cpr::Post(cpr::Url{config_.base_url + "/messages"},
+                                        cpr::Header{{"x-api-key", config_.api_key},
+                                                    {"anthropic-version", config_.api_version},
+                                                    {"Content-Type", "application/json"}},
+                                        cpr::Body{body.dump()});
+
+    if (response.status_code != 200) {
+        throw std::runtime_error("AnthropicChat: request failed (HTTP " + std::to_string(response.status_code) +
+                                  "): " + response.text);
+    }
+
+    json parsed = json::parse(response.text);
+    return core::Message::assistant(parsed["content"][0]["text"].get<std::string>());
+}
+
+} // namespace langchain::providers
