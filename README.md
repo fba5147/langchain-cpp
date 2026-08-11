@@ -7,7 +7,7 @@ tools, agents, RAG, and MCP. Not affiliated with or endorsed by the LangChain pr
 The Python library is the reference for concepts and API shape, not a spec to mirror line-for-line — the
 goal is an idiomatic C++ library, not a transliteration.
 
-## Status: v0.3.0 — core + one provider + tools/structured output + agents
+## Status: v0.4.0 — core + one provider + tools/structured output + agents + RAG
 
 What exists today:
 
@@ -40,8 +40,20 @@ What exists today:
 - **`AgentExecutor`** — runs the LLM ↔ tool loop: binds the registry to the model, executes whatever
   tools a reply asks for, feeds the results back as `tool_result` messages, and repeats until a plain
   answer comes back or `AgentConfig::max_steps` is exceeded.
-- **`Document`** / **`Result<T>`** — small core value types; `Document` is reserved for the RAG phase,
-  `Result<T>` is used by `Tool::call` to report failure without throwing.
+- **`Document`** / **`Result<T>`** — small core value types; `Result<T>` is used by `Tool::call` to
+  report failure without throwing.
+- **RAG stack** (`langchain::rag`):
+  - `DocumentLoader` / `TextLoader` / `MarkdownLoader` — load a file into one or more `Document`s.
+  - `RecursiveCharacterTextSplitter` — splits text into `chunk_size`-bounded pieces, trying paragraph
+    breaks, then lines, then words, then raw characters, and carrying `chunk_overlap` characters of
+    trailing context into the next chunk.
+  - `Embeddings` — base interface (`embed_query` / `embed_documents`), with `MockEmbeddings`
+    (deterministic hash-based bag-of-words, no network) and `OpenAIEmbeddings` (OpenAI's embeddings
+    API).
+  - `VectorStore` / `InMemoryVectorStore` — add documents, brute-force cosine-similarity search;
+    `store->as_retriever(k)` wraps it as a `Retriever`.
+  - `Retriever` — a `Runnable<string, vector<Document>>`, so it composes into a chain like any other
+    Runnable.
 
 ## Example
 
@@ -93,10 +105,30 @@ agents::AgentExecutor agent(model, tools);
 core::Message answer = agent.run("What is 123 * 456?");
 ```
 
+RAG — load, split, embed, index, and retrieve:
+
+```cpp
+auto documents = rag::TextLoader("docs/raii.txt").load();
+auto chunks = rag::RecursiveCharacterTextSplitter().split_documents(documents);
+
+auto store = std::make_shared<rag::InMemoryVectorStore>(std::make_shared<rag::OpenAIEmbeddings>());
+store->add_documents(chunks);
+
+auto retriever = store->as_retriever(/*k=*/3);
+std::vector<core::Document> relevant = retriever->invoke("What is RAII?");
+```
+
+`Retriever::invoke` returns `vector<Document>`, not a `string`, so it doesn't (yet) pipe directly into
+a `ChatPromptTemplate` with `operator|` — that needs a `RunnableParallel`/passthrough combinator this
+milestone didn't build. `examples/rag_demo.cpp` shows the current pattern: call the retriever
+explicitly, then feed its output into the prompt's `context` variable.
+
 See `examples/mock_chain.cpp` and `examples/structured_output.cpp` for fully offline versions of the
 first two snippets above (no API key needed), `examples/basic_chat.cpp` for a real provider call,
-`examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema, and
-`examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set).
+`examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema,
+`examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set), and
+`examples/rag_demo.cpp` for the full RAG pipeline (offline with `MockEmbeddings`, or live with
+`OPENAI_API_KEY` set).
 
 ## Building
 
@@ -116,6 +148,7 @@ Run the examples:
 ./build/examples/structured_output
 ./build/examples/tools_demo
 ./build/examples/agent_demo
+./build/examples/rag_demo
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 ```
@@ -126,11 +159,12 @@ Roughly in build order; each is its own milestone rather than all-at-once:
 
 1. ~~Core types + `Runnable` + one provider~~ (v0.1.0)
 2. ~~Tools + structured output parsing~~ (v0.2.0)
-3. ~~Agents (LLM ↔ tool loop)~~ (this release)
-4. RAG stack: loaders, splitters, embeddings, vector stores, retrievers
+3. ~~Agents (LLM ↔ tool loop)~~ (v0.3.0)
+4. ~~RAG stack: loaders, splitters, embeddings, vector stores, retrievers~~ (this release)
 5. MCP client/server support
 6. Local inference (llama.cpp, Ollama)
-7. Streaming, async, cancellation, retries, callbacks, tracing
+7. Streaming, async, cancellation, retries, callbacks, tracing, and a `RunnableParallel`/passthrough
+   combinator (needed for a one-line `retriever | prompt | model | parser` RAG chain)
 
 ## License
 

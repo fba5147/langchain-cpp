@@ -1,0 +1,5 @@
+A vector database stores embeddings -- numeric vectors that represent the meaning of a piece
+of text, image, or audio -- and lets you search for the nearest vectors to a query vector.
+That "nearest neighbor" search is what powers semantic search and retrieval-augmented
+generation: instead of matching keywords, you match meaning. Popular vector databases include
+FAISS, Qdrant, Milvus, and pgvector.

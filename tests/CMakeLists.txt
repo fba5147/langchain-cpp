@@ -8,6 +8,10 @@ add_executable(langchain_tests
     test_json_parser.cpp
     test_tools.cpp
     test_agent_executor.cpp
+    test_loaders.cpp
+    test_text_splitter.cpp
+    test_embeddings.cpp
+    test_vector_store.cpp
 )
 target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest::gtest_main)
 

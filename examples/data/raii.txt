@@ -1,0 +1,5 @@
+RAII (Resource Acquisition Is Initialization) is a C++ idiom where a resource's lifetime is
+tied to an object's lifetime. A constructor acquires the resource (memory, a file handle, a
+lock) and the destructor releases it, so the resource is automatically freed when the object
+goes out of scope, even if an exception is thrown. std::unique_ptr, std::vector, and
+std::lock_guard are all RAII types.

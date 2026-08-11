@@ -12,3 +12,7 @@ target_link_libraries(tools_demo PRIVATE langchain::core)
 
 add_executable(agent_demo agent_demo.cpp)
 target_link_libraries(agent_demo PRIVATE langchain::core)
+
+add_executable(rag_demo rag_demo.cpp)
+target_link_libraries(rag_demo PRIVATE langchain::core)
+target_compile_definitions(rag_demo PRIVATE EXAMPLES_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

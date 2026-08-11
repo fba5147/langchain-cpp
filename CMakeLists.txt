@@ -22,6 +22,14 @@ add_library(langchain_core
     src/tools/function_tool.cpp
     src/tools/tool_registry.cpp
     src/agents/agent_executor.cpp
+    src/rag/loaders/text_loader.cpp
+    src/rag/loaders/markdown_loader.cpp
+    src/rag/splitters/recursive_character_text_splitter.cpp
+    src/rag/embeddings/mock_embeddings.cpp
+    src/rag/embeddings/openai_embeddings.cpp
+    src/rag/vectorstores/vector_store.cpp
+    src/rag/vectorstores/in_memory_vector_store.cpp
+    src/rag/retrievers/retriever.cpp
 )
 add_library(langchain::core ALIAS langchain_core)
 
