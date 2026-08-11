@@ -72,6 +72,14 @@ prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), 8 (`M
 
 - **More integration breadth** (part 10) — `FaissVectorStore` and `PdfLoader` shipped; still open:
   Qdrant/pgvector vector stores, CSV/web-HTML document loaders, more embeddings providers.
+- **Split `langchain_core` into multiple library targets** — adding FAISS/poppler-cpp as dependencies of
+  the single monolithic `langchain_core` static library means every consumer (every example, the
+  benchmark binary) now links `libfaiss`/`libpoppler-cpp` and pays their dynamic-linker load cost at
+  startup, even if it never touches `FaissVectorStore`/`PdfLoader` — confirmed via `otool -L` and
+  measured as a real ~3x cold-start regression in `benchmarks/RESULTS.md`. `target_link_libraries(...
+  PRIVATE ...)` doesn't fix this for a *static* library (CMake still propagates link libraries to
+  consumers regardless of the keyword); actually fixing it means splitting optional-dependency features
+  into their own linkable targets that consumers opt into.
 - **An HTTP/SSE transport for MCP** — both `McpClient` and `McpServer` (part 9) only speak stdio today
   (the common case for local servers); a remote/HTTP transport is a natural, separable follow-up.
 - **A LangSmith-equivalent tracing backend** — part 3 shipped the hook points

@@ -96,7 +96,25 @@ add_library(langchain::core ALIAS langchain_core)
 target_include_directories(langchain_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-target_link_libraries(langchain_core PUBLIC nlohmann_json::nlohmann_json cpr::cpr ${LANGCHAIN_FAISS_TARGET} PkgConfig::POPPLER_CPP)
+# faiss/poppler-cpp are PRIVATE, unlike nlohmann_json/cpr above: neither
+# type leaks into a public header (FaissVectorStore/PdfLoader forward-
+# declare/hide them). NOTE this only keeps their include directories off
+# consumers' compile lines -- for a STATIC library, CMake always
+# propagates *link* libraries to consumers regardless of PUBLIC/PRIVATE
+# (it has to: the static archive's own object files still reference
+# faiss::/poppler:: symbols, and nothing strips faiss_vector_store.cpp.o/
+# pdf_loader.cpp.o from the archive just because a given consumer never
+# calls them). So every consumer -- every example, bench_cpp -- still
+# links libfaiss/libpoppler-cpp and pays their dynamic-linker load cost at
+# startup even if it never touches FaissVectorStore/PdfLoader; confirmed
+# via `otool -L` and measured in benchmarks/RESULTS.md. Actually avoiding
+# that would mean splitting FaissVectorStore/PdfLoader into their own
+# library target that examples/tests opt into -- a real restructuring,
+# not a target_link_libraries keyword change; left as a follow-up.
+target_link_libraries(langchain_core
+    PUBLIC nlohmann_json::nlohmann_json cpr::cpr
+    PRIVATE ${LANGCHAIN_FAISS_TARGET} PkgConfig::POPPLER_CPP
+)
 
 if(LANGCHAIN_BUILD_EXAMPLES)
     add_subdirectory(examples)
