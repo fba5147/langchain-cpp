@@ -74,3 +74,18 @@ TEST(ToolRegistry, RendersAnthropicToolSchema) {
     EXPECT_EQ(schema[0]["description"], "adds two numbers");
     EXPECT_EQ(schema[0]["input_schema"]["type"], "object");
 }
+
+TEST(ToolRegistry, RendersGeminiToolSchema) {
+    ToolRegistry registry;
+    registry.add(std::make_shared<FunctionTool>(
+        "add", "adds two numbers", [](const nlohmann::json&) -> nlohmann::json { return 0; },
+        nlohmann::json{{"type", "object"}}));
+
+    auto schema = registry.to_gemini_tools_json();
+    ASSERT_EQ(schema.size(), 1u);
+    auto declarations = schema[0]["functionDeclarations"];
+    ASSERT_EQ(declarations.size(), 1u);
+    EXPECT_EQ(declarations[0]["name"], "add");
+    EXPECT_EQ(declarations[0]["description"], "adds two numbers");
+    EXPECT_EQ(declarations[0]["parameters"]["type"], "object");
+}

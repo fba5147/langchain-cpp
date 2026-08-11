@@ -1,7 +1,8 @@
 // Demonstrates AgentExecutor's LLM <-> tool loop with a calculator tool.
 // Uses a scripted MockChat by default (deterministic, no network); set
-// ANTHROPIC_API_KEY or OPENAI_API_KEY to see a live model actually decide
-// to call the tool.
+// ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY (or create a .env
+// file, see .env.example) to see a live model actually decide to call the
+// tool.
 
 #include "langchain/langchain.hpp"
 
@@ -53,6 +54,8 @@ std::shared_ptr<llm::ChatModel> make_scripted_mock() {
 } // namespace
 
 int main() {
+    core::load_dotenv();
+
     auto tool_registry = make_tools();
 
     std::shared_ptr<llm::ChatModel> model;
@@ -60,8 +63,11 @@ int main() {
         model = std::make_shared<providers::AnthropicChat>();
     } else if (std::getenv("OPENAI_API_KEY") != nullptr) {
         model = std::make_shared<providers::OpenAIChat>();
+    } else if (std::getenv("GOOGLE_API_KEY") != nullptr) {
+        model = std::make_shared<providers::GeminiChat>();
     } else {
-        std::cout << "No ANTHROPIC_API_KEY or OPENAI_API_KEY set; using a scripted MockChat instead.\n\n";
+        std::cout << "No ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY set; using a scripted MockChat "
+                     "instead.\n\n";
         model = make_scripted_mock();
     }
 

@@ -65,8 +65,12 @@ concrete things worth doing:
   parser` work as a single pipe chain (see the RAG section of the README for why it currently doesn't).
 - **Streaming** — `ChatModel::invoke` is currently all-or-nothing; a `stream()` returning incremental
   chunks (naturally expressible with C++20 coroutines) is unimplemented.
-- **Live coverage for `AnthropicChat` tool-calling** — its wire-format code is written to spec but
-  hasn't had the equivalent of the `ollama_demo.cpp` live smoke test that `OpenAIChat` got.
+- **Live coverage for `AnthropicChat` tool-calling and `GeminiChat`** — both are written to spec
+  (`GeminiChat`'s pure request/response conversion has unit tests, see `tests/test_gemini_wire_format.cpp`)
+  but neither has had the equivalent of the `ollama_demo.cpp` live smoke test that `OpenAIChat` got —
+  no Anthropic/Google credentials were available while building this. If you have one, running
+  `examples/more_providers_demo.cpp` (Gemini) or a quick Anthropic tool-calling script against a real
+  key and reporting back what broke is high-value.
 - **A real vector store integration** (FAISS, Qdrant, pgvector, ...) alongside `InMemoryVectorStore`.
 - **CI matrix breadth** — the current workflow builds on Linux and macOS; a Windows/MSVC leg would
   catch platform-specific bugs (case-sensitive includes, `<filesystem>` quirks, etc.).

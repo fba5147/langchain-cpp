@@ -46,4 +46,16 @@ nlohmann::json ToolRegistry::to_anthropic_tools_json() const {
     return tools;
 }
 
+nlohmann::json ToolRegistry::to_gemini_tools_json() const {
+    nlohmann::json declarations = nlohmann::json::array();
+    for (const auto& tool : tools_) {
+        declarations.push_back({
+            {"name", tool->name()},
+            {"description", tool->description()},
+            {"parameters", tool->parameters_schema()},
+        });
+    }
+    return nlohmann::json::array({nlohmann::json{{"functionDeclarations", declarations}}});
+}
+
 } // namespace langchain::tools

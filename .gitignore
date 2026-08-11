@@ -8,3 +8,5 @@ CMakeUserPresets.json
 .idea/
 
 node_modules/
+
+.env

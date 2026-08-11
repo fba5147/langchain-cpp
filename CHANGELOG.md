@@ -4,14 +4,32 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet follow strict
 semantic versioning (pre-1.0, breaking changes can land in a minor bump).
 
-## [Unreleased]
+## [0.5.0] — More providers
+
+- `core::load_dotenv(path = ".env")` — loads `KEY=VALUE` lines into the process environment for keys
+  not already set. `.env.example` documents every variable the providers/examples read; `.env` itself
+  is gitignored. Wired into every example that can hit a real provider.
+- `AzureOpenAIChat` — talks to an Azure OpenAI deployment; shares wire-format code with `OpenAIChat`
+  (moved into `providers::detail` so both can use it), differing only in URL structure and auth header.
+- `GeminiChat` — Google's Gemini API. A genuinely different wire format (`user`/`model` roles, a
+  separate system-instruction field, `functionCall`/`functionResponse` parts with no call-id concept);
+  the pure conversion logic is unit-tested (`tests/test_gemini_wire_format.cpp`) since no
+  `GOOGLE_API_KEY` was available to smoke-test against the real endpoint.
+- `GroqChat` / `MistralChat` / `DeepSeekChat` — presets over `OpenAIChat` for well-known
+  OpenAI-compatible APIs.
+- `ToolRegistry::to_gemini_tools_json()`.
+- `examples/more_providers_demo.cpp`.
+
+## [0.4.1] — Open-source scaffolding, benchmarks, Ollama verification
 
 - Open-source project scaffolding: LICENSE (MIT), CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md,
   GitHub issue/PR templates, CI workflow.
 - `benchmarks/`: cold-start and mocked-chain-throughput comparisons against Python LangChain
   (`langchain-core`) and TypeScript LangChain (`@langchain/core`).
 - `examples/ollama_demo.cpp`: `OpenAIChat`/`OpenAIEmbeddings` verified end-to-end against a local
-  Ollama server (chat, tool-calling agent loop, embeddings).
+  Ollama server (chat, tool-calling agent loop, embeddings) — caught and fixed a real bug in
+  `MockEmbeddings`' tokenizer (punctuation-attached words never hash-matched) along the way.
+- `docs/demo.gif`: a recorded terminal demo embedded in the README.
 
 ## [0.4.0] — RAG stack
 

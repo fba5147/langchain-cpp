@@ -4,8 +4,8 @@
 // a chat model as context.
 //
 // Uses MockEmbeddings (deterministic, no network) and MockChat by default;
-// set OPENAI_API_KEY to embed with OpenAIEmbeddings and answer with
-// OpenAIChat instead.
+// set OPENAI_API_KEY (or create a .env file, see .env.example) to embed
+// with OpenAIEmbeddings and answer with OpenAIChat instead.
 //
 // Note: today's Runnable doesn't yet have a RunnableParallel/passthrough
 // combinator, so `retriever | prompt | model | parser` as one pipe chain
@@ -17,6 +17,7 @@
 #include "langchain/langchain.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 
 using namespace langchain;
@@ -41,6 +42,8 @@ std::string join_contents(const std::vector<core::Document>& documents) {
 } // namespace
 
 int main() {
+    core::load_dotenv();
+
     std::shared_ptr<rag::Embeddings> embeddings;
     std::shared_ptr<llm::ChatModel> model;
 
@@ -73,7 +76,8 @@ int main() {
     std::string question = "What is RAII?";
     std::vector<core::Document> retrieved = retriever->invoke(question);
 
-    std::cout << "Retrieved chunk (source: " << retrieved.front().metadata.value("source", "?") << "):\n"
+    std::string source = retrieved.front().metadata.value("source", "?");
+    std::cout << "Retrieved chunk (source: " << std::filesystem::path(source).filename().string() << "):\n"
               << retrieved.front().content << "\n\n";
 
     auto prompt = std::make_shared<prompts::ChatPromptTemplate>(

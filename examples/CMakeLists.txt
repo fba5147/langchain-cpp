@@ -19,3 +19,6 @@ target_compile_definitions(rag_demo PRIVATE EXAMPLES_DATA_DIR="${CMAKE_CURRENT_S
 
 add_executable(ollama_demo ollama_demo.cpp)
 target_link_libraries(ollama_demo PRIVATE langchain::core)
+
+add_executable(more_providers_demo more_providers_demo.cpp)
+target_link_libraries(more_providers_demo PRIVATE langchain::core)

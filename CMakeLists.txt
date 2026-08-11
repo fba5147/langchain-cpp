@@ -14,11 +14,17 @@ find_package(cpr CONFIG REQUIRED)
 
 add_library(langchain_core
     src/core/message.cpp
+    src/core/dotenv.cpp
     src/prompts/prompt_template.cpp
     src/prompts/chat_prompt_template.cpp
     src/providers/mock/mock_chat.cpp
+    src/providers/openai/openai_wire_format.cpp
     src/providers/openai/openai_chat.cpp
+    src/providers/openai/openai_compatible_presets.cpp
     src/providers/anthropic/anthropic_chat.cpp
+    src/providers/azure/azure_openai_chat.cpp
+    src/providers/google/gemini_wire_format.cpp
+    src/providers/google/gemini_chat.cpp
     src/parsers/json_parser.cpp
     src/tools/function_tool.cpp
     src/tools/tool_registry.cpp

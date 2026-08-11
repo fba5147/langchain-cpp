@@ -10,8 +10,8 @@
 namespace langchain::tools {
 
 // Holds the set of tools available to an agent, keyed by name, and renders
-// them into the JSON shape OpenAI/Anthropic-style function-calling APIs
-// expect.
+// them into the JSON shape OpenAI/Anthropic/Gemini-style function-calling
+// APIs expect.
 class ToolRegistry {
 public:
     // Throws std::invalid_argument if a tool with the same name is already registered.
@@ -25,6 +25,9 @@ public:
 
     // [{"name", "description", "input_schema"}, ...]
     nlohmann::json to_anthropic_tools_json() const;
+
+    // [{"functionDeclarations": [{"name", "description", "parameters"}, ...]}]
+    nlohmann::json to_gemini_tools_json() const;
 
 private:
     std::vector<std::shared_ptr<Tool>> tools_;

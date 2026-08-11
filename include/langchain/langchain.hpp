@@ -1,10 +1,13 @@
 #pragma once
 
 // Convenience umbrella header pulling in the current milestone's public API:
-// core types, the Runnable/`|` composition mechanism, prompt templates, the
-// string output parser, and the mock/OpenAI/Anthropic chat providers.
+// core types, the Runnable/`|` composition mechanism, prompt templates,
+// output parsers, tools/agents, the RAG stack, and the chat providers
+// (Mock, OpenAI, Azure OpenAI, Anthropic, Gemini, plus OpenAI-compatible
+// presets for Groq/Mistral/DeepSeek).
 
 #include "langchain/core/document.hpp"
+#include "langchain/core/dotenv.hpp"
 #include "langchain/core/message.hpp"
 #include "langchain/core/result.hpp"
 #include "langchain/core/runnable.hpp"
@@ -21,8 +24,11 @@
 #include "langchain/prompts/prompt_template.hpp"
 
 #include "langchain/providers/anthropic/anthropic_chat.hpp"
+#include "langchain/providers/azure/azure_openai_chat.hpp"
+#include "langchain/providers/google/gemini_chat.hpp"
 #include "langchain/providers/mock/mock_chat.hpp"
 #include "langchain/providers/openai/openai_chat.hpp"
+#include "langchain/providers/openai/openai_compatible_presets.hpp"
 
 #include "langchain/tools/function_tool.hpp"
 #include "langchain/tools/tool.hpp"

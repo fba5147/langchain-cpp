@@ -10,7 +10,9 @@ tools, agents, RAG, and MCP. Not affiliated with or endorsed by the LangChain pr
 The Python library is the reference for concepts and API shape, not a spec to mirror line-for-line — the
 goal is an idiomatic C++ library, not a transliteration.
 
-## Status: v0.4.0 — core + one provider + tools/structured output + agents + RAG
+![A terminal recording showing examples/agent_demo giving an LLM a calculator tool and getting back "123 * 456 is 56088.", then examples/rag_demo retrieving the relevant document chunk and answering a question from it](docs/demo.gif)
+
+## Status: v0.5.0 — core + six providers + tools/structured output + agents + RAG
 
 What exists today:
 
@@ -19,15 +21,26 @@ What exists today:
 - **`Message` / `MessageRole`** — value type for chat turns (system/user/assistant/tool), extended with
   `ToolCall` support: `Message::assistant_tool_calls(...)` for a reply that wants to call tools, and
   `Message::tool_result(call_id, content)` for the answer sent back.
-- **`ChatModel`** — base interface (`Runnable<vector<Message>, Message>`), with three implementations:
+- **`ChatModel`** — base interface (`Runnable<vector<Message>, Message>`), with:
   - `MockChat` — canned response, function-driven response, or a scripted `vector<Message>` replayed
     one per call (repeating the last entry once exhausted) — no network. Use it for tests and offline
     chain/agent development.
   - `OpenAIChat` — OpenAI Chat Completions API, including function-calling (also works against any
     OpenAI-compatible server — Ollama, llama.cpp server, vLLM, LM Studio — by pointing `base_url` at
-    it).
+    it; **verified end-to-end against a live Ollama server**, see `examples/ollama_demo.cpp`).
+  - `AzureOpenAIChat` — an Azure OpenAI deployment. Shares its wire-format code with `OpenAIChat` (the
+    request/response body is identical); only the URL structure and auth header (`api-key`) differ.
   - `AnthropicChat` — Anthropic Messages API, including tool use (handles Anthropic's content-block
     array shape and its lack of a "tool" role under the hood).
+  - `GeminiChat` — Google's Gemini API. A genuinely different wire format: roles are `user`/`model`
+    (not `assistant`), the system prompt is a separate top-level field, and tool calls/results use
+    `functionCall`/`functionResponse` parts with no call-id concept (correlation is by name, recovered
+    internally — see `src/providers/google/gemini_wire_format.hpp`). Unit-tested against synthetic
+    request/response JSON; not yet smoke-tested against the real endpoint (no `GOOGLE_API_KEY`
+    available in the environment this was built in).
+  - `GroqChat` / `MistralChat` / `DeepSeekChat` — thin presets over `OpenAIChat` for well-known
+    OpenAI-compatible APIs (preset `base_url`/default model/API-key env var, nothing else). Any other
+    OpenAI-compatible service works directly through `OpenAIChat` + `base_url`.
   - `ChatModel::bind_tools(registry)` returns a copy of the model that offers those tools on every
     subsequent `invoke()`; the default throws for providers that don't support it.
 - **`PromptTemplate`** / **`ChatPromptTemplate`** — `{name}`-style placeholder substitution into a
@@ -57,6 +70,29 @@ What exists today:
     `store->as_retriever(k)` wraps it as a `Retriever`.
   - `Retriever` — a `Runnable<string, vector<Document>>`, so it composes into a chain like any other
     Runnable.
+
+## Configuration (API keys)
+
+Providers read their API key from an environment variable if `api_key` is left empty in their config
+(see each provider's header for which one). For local development, `core::load_dotenv()` loads a
+`.env` file from the current working directory into the process environment, without overriding
+variables that are already set:
+
+```bash
+cp .env.example .env   # then fill in whichever keys you have
+```
+
+```cpp
+int main() {
+    core::load_dotenv();   // call this before constructing any provider
+    // ...
+}
+```
+
+Every example that can hit a real provider (`basic_chat`, `agent_demo`, `rag_demo`,
+`more_providers_demo`) calls this at the top of `main()`, so dropping a `.env` file at the repo root
+is enough to make them use real providers instead of falling back to `MockChat`/`MockEmbeddings` — no
+need to `export` anything in your shell each session. `.env` is gitignored; never commit real keys.
 
 ## Example
 
@@ -156,9 +192,14 @@ Run the examples:
 ./build/examples/agent_demo
 ./build/examples/rag_demo
 ./build/examples/ollama_demo   # requires `ollama serve` + `ollama pull llama3.2 nomic-embed-text`
+./build/examples/more_providers_demo   # Gemini/Azure OpenAI/Groq -- each skips if its keys aren't set
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
+GOOGLE_API_KEY=... ./build/examples/basic_chat
 ```
+
+Or drop a `.env` file at the repo root (see [Configuration](#configuration-api-keys) above) and skip
+the `KEY=... ` prefixes entirely.
 
 ### Verified against a real server (Ollama)
 
@@ -172,8 +213,10 @@ library's behavior was already correct here (`FunctionTool::call` catches the re
 reports it back to the model as a `Result` error instead of crashing), but it's a good reminder that
 **tool implementations should coerce loosely-typed arguments defensively** rather than assume a
 provider enforced its own schema — `examples/ollama_demo.cpp`'s calculator does this.
-`AnthropicChat`'s tool-calling wire format is written to the same spec but hasn't had the equivalent
-live smoke test in this environment.
+`AnthropicChat`'s tool-calling wire format and `GeminiChat` (all of it) are written to spec but
+haven't had the equivalent live smoke test in this environment — no Anthropic/Google credentials were
+available. If you have one and hit a wire-format bug, that's exactly the gap this note is flagging;
+please file an issue.
 
 ## Roadmap
 
@@ -182,11 +225,16 @@ Roughly in build order; each is its own milestone rather than all-at-once:
 1. ~~Core types + `Runnable` + one provider~~ (v0.1.0)
 2. ~~Tools + structured output parsing~~ (v0.2.0)
 3. ~~Agents (LLM ↔ tool loop)~~ (v0.3.0)
-4. ~~RAG stack: loaders, splitters, embeddings, vector stores, retrievers~~ (this release)
-5. MCP client/server support
-6. Local inference (llama.cpp, Ollama)
-7. Streaming, async, cancellation, retries, callbacks, tracing, and a `RunnableParallel`/passthrough
+4. ~~RAG stack: loaders, splitters, embeddings, vector stores, retrievers~~ (v0.4.0)
+5. ~~More providers: Azure OpenAI, Gemini, OpenAI-compatible presets (Groq/Mistral/DeepSeek)~~ (this
+   release)
+6. MCP client/server support
+7. Local inference (llama.cpp) — Ollama already works today through `OpenAIChat` + `base_url`, see
+   `examples/ollama_demo.cpp`; this item is about a direct llama.cpp/GGUF binding with no server in
+   between.
+8. Streaming, async, cancellation, retries, callbacks, tracing, and a `RunnableParallel`/passthrough
    combinator (needed for a one-line `retriever | prompt | model | parser` RAG chain)
+9. Live smoke tests for `AnthropicChat` tool-calling and `GeminiChat` against their real endpoints
 
 ## Contributing
 
