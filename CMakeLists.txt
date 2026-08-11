@@ -18,6 +18,9 @@ add_library(langchain_core
     src/providers/mock/mock_chat.cpp
     src/providers/openai/openai_chat.cpp
     src/providers/anthropic/anthropic_chat.cpp
+    src/parsers/json_parser.cpp
+    src/tools/function_tool.cpp
+    src/tools/tool_registry.cpp
 )
 add_library(langchain::core ALIAS langchain_core)
 

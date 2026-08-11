@@ -11,7 +11,9 @@
 
 #include "langchain/llm/chat_model.hpp"
 
+#include "langchain/parsers/json_parser.hpp"
 #include "langchain/parsers/string_parser.hpp"
+#include "langchain/parsers/structured_parser.hpp"
 
 #include "langchain/prompts/chat_prompt_template.hpp"
 #include "langchain/prompts/prompt_template.hpp"
@@ -19,3 +21,7 @@
 #include "langchain/providers/anthropic/anthropic_chat.hpp"
 #include "langchain/providers/mock/mock_chat.hpp"
 #include "langchain/providers/openai/openai_chat.hpp"
+
+#include "langchain/tools/function_tool.hpp"
+#include "langchain/tools/tool.hpp"
+#include "langchain/tools/tool_registry.hpp"

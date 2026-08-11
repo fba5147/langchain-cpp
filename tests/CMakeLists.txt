@@ -5,6 +5,8 @@ add_executable(langchain_tests
     test_prompt_template.cpp
     test_runnable.cpp
     test_mock_chat.cpp
+    test_json_parser.cpp
+    test_tools.cpp
 )
 target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest::gtest_main)
 

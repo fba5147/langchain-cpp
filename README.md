@@ -7,7 +7,7 @@ tools, agents, RAG, and MCP. Not affiliated with or endorsed by the LangChain pr
 The Python library is the reference for concepts and API shape, not a spec to mirror line-for-line — the
 goal is an idiomatic C++ library, not a transliteration.
 
-## Status: v0.1.0 — core + one provider
+## Status: v0.2.0 — core + one provider + tools/structured output
 
 What exists today:
 
@@ -23,8 +23,16 @@ What exists today:
 - **`PromptTemplate`** / **`ChatPromptTemplate`** — `{name}`-style placeholder substitution into a
   string or a rendered `vector<Message>`.
 - **`StrOutputParser`** — pulls the text back out of a `Message`.
-- **`Document`** / **`Result<T>`** — small core value types reserved for later phases (RAG documents,
-  fallible tool/agent results).
+- **`JsonOutputParser`** / **`StructuredOutputParser<T>`** — parses a `Message`'s content as JSON
+  (tolerating a ` ```json ` fence), or straight into a C++ type `T` via nlohmann::json's ADL
+  `to_json`/`from_json`. Where Python LangChain resolves the target schema at runtime, here `T` is a
+  compile-time parameter, so `chain->invoke(...)` returns a real `Person`, not a dict you cast.
+- **`Tool`** / **`FunctionTool`** / **`ToolRegistry`** — a callable an agent can pick from
+  (name/description/JSON-schema parameters), a way to wrap a plain function as one, and a registry
+  that renders the OpenAI/Anthropic-style function-calling JSON. Not wired into an agent loop yet —
+  that's next.
+- **`Document`** / **`Result<T>`** — small core value types; `Document` is reserved for the RAG phase,
+  `Result<T>` is used by `Tool::call` to report failure without throwing.
 
 ## Example
 
@@ -50,8 +58,22 @@ auto chain = prompt | model | parser;
 std::string answer = chain->invoke({{"language", "C++"}, {"topic", "RAII"}});
 ```
 
-See `examples/mock_chain.cpp` for a fully offline version of this (no API key needed), and
-`examples/basic_chat.cpp` for a real provider call.
+Structured output — parse straight into a C++ type instead of a string:
+
+```cpp
+struct Person {
+    std::string name;
+    int age;
+};
+NLOHMANN_DEFINE_TYPE_INTRUSIVE(Person, name, age)
+
+auto chain = prompt | model | std::make_shared<parsers::StructuredOutputParser<Person>>();
+Person person = chain->invoke({{"name", "Ada Lovelace"}, {"age", "36"}});
+```
+
+See `examples/mock_chain.cpp` and `examples/structured_output.cpp` for fully offline versions of the
+above (no API key needed), `examples/basic_chat.cpp` for a real provider call, and
+`examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema.
 
 ## Building
 
@@ -68,6 +90,8 @@ Run the examples:
 
 ```bash
 ./build/examples/mock_chain
+./build/examples/structured_output
+./build/examples/tools_demo
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 ```
@@ -76,8 +100,8 @@ ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 
 Roughly in build order; each is its own milestone rather than all-at-once:
 
-1. ~~Core types + `Runnable` + one provider~~ (this release)
-2. Tools + structured output parsing
+1. ~~Core types + `Runnable` + one provider~~ (v0.1.0)
+2. ~~Tools + structured output parsing~~ (this release)
 3. Agents (LLM ↔ tool loop)
 4. RAG stack: loaders, splitters, embeddings, vector stores, retrievers
 5. MCP client/server support
