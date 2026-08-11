@@ -16,13 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ninja (Linux)
+      - name: Install Ninja and native build deps (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        # gfortran is needed to build vcpkg's reference BLAS/LAPACK ports,
+        # which faiss depends on; pkg-config is needed to locate poppler-cpp.
+        run: sudo apt-get update && sudo apt-get install -y ninja-build pkg-config gfortran
 
-      - name: Install Ninja (macOS)
+      - name: Install Ninja and native build deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install ninja
+        run: brew install ninja pkg-config
 
       - name: Cache vcpkg
         uses: actions/cache@v4

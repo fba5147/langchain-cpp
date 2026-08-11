@@ -12,7 +12,7 @@ goal is an idiomatic C++ library, not a transliteration.
 
 ![A terminal recording of examples/ollama_demo running against a real local Ollama server: plain chat, streaming, a tool-calling agent answering "123 * 456 is 56088.", a streamed tool call, and embeddings -- no API key involved](docs/demo.gif)
 
-## Status: v0.12.0 — core + six providers (streaming) + tools/structured output + agents + RAG + callbacks + caching + chat history + few-shot prompting + rate limiting
+## Status: v0.17.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, PDF) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
 
 What exists today:
 
@@ -121,16 +121,32 @@ What exists today:
   `OpenAIChat`/`AzureOpenAIChat` encode images as content-parts JSON — the only providers here that
   currently support them; `AnthropicChat`/`GeminiChat` throw a clear error rather than silently
   dropping an attached image. See `examples/multimodal_demo.cpp`.
+- **MCP client and server** (`langchain::mcp`) — `McpClient` spawns an MCP server as a subprocess and
+  talks JSON-RPC 2.0 to it over stdio (the transport most local MCP servers use); `initialize()`
+  performs the handshake, `list_tools()`/`call_tool()` cover the tools capability
+  (resources/prompts/sampling aren't implemented — out of scope for what `AgentExecutor` needs).
+  `mcp::as_tools(client)` wraps every tool a server exposes as a `langchain::tools::Tool`, so they drop
+  straight into a `ToolRegistry` and get called by `AgentExecutor` like any other tool — mirrors
+  LangChain.js's `@langchain/mcp-adapters`. `McpServer` is the other direction: wraps a `ToolRegistry`
+  and serves it over stdio, so *this* project's tools become callable by any MCP client. Verified live
+  end-to-end against the official reference server (`npx @modelcontextprotocol/server-everything`) *and*
+  through a real agent loop backed by local Ollama (`examples/mcp_client_demo.cpp`) — and, for the
+  server side, against langchain-cpp's own `McpClient` spawning `examples/mcp_server_demo.cpp` as a
+  subprocess, an automated round-trip test with no network dependency
+  (`tests/test_mcp_server_roundtrip.cpp`).
 - **RAG stack** (`langchain::rag`):
-  - `DocumentLoader` / `TextLoader` / `MarkdownLoader` — load a file into one or more `Document`s.
+  - `DocumentLoader` / `TextLoader` / `MarkdownLoader` / `PdfLoader` — load a file into one or more
+    `Document`s; `PdfLoader` (via poppler-cpp) yields one `Document` per page, tagged with
+    `metadata["page"]`, mirroring LangChain's `PyPDFLoader`.
   - `RecursiveCharacterTextSplitter` — splits text into `chunk_size`-bounded pieces, trying paragraph
     breaks, then lines, then words, then raw characters, and carrying `chunk_overlap` characters of
     trailing context into the next chunk.
   - `Embeddings` — base interface (`embed_query` / `embed_documents`), with `MockEmbeddings`
     (deterministic hash-based bag-of-words, no network) and `OpenAIEmbeddings` (OpenAI's embeddings
     API).
-  - `VectorStore` / `InMemoryVectorStore` — add documents, brute-force cosine-similarity search;
-    `store->as_retriever(k)` wraps it as a `Retriever`.
+  - `VectorStore` / `InMemoryVectorStore` (brute-force cosine similarity) / `FaissVectorStore` (FAISS's
+    `IndexFlatIP` over L2-normalized vectors — exact nearest-neighbor search via a real vector-search
+    library instead of the store's own loop) — `store->as_retriever(k)` wraps either as a `Retriever`.
   - `Retriever` — a `Runnable<string, vector<Document>>`, so it composes into a chain like any other
     Runnable.
   - `FormatDocumentsAsString` — joins retrieved `Document`s into one string (`Runnable<vector<Document>,
@@ -325,7 +341,10 @@ note below on local-model tool-calling reliability).
 
 ## Building
 
-Requires a C++20 compiler, CMake 3.21+, and [vcpkg](https://github.com/microsoft/vcpkg).
+Requires a C++20 compiler, CMake 3.21+, `pkg-config`, and [vcpkg](https://github.com/microsoft/vcpkg)
+(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the Homebrew alternative this project's own development
+actually runs on).
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
@@ -350,6 +369,9 @@ Run the examples:
 ./build/examples/few_shot_demo
 ./build/examples/rate_limit_demo   # prints real elapsed times -- takes a few seconds to run
 ./build/examples/multimodal_demo
+./build/examples/mcp_client_demo   # requires `npx` (Node.js) and `ollama serve` running locally
+# examples/mcp_server_demo isn't meant to be run directly (it speaks stdio JSON-RPC, not a
+# human-typed REPL) -- it's spawned by an MCP client, see tests/test_mcp_server_roundtrip.cpp
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 GOOGLE_API_KEY=... ./build/examples/basic_chat
@@ -372,10 +394,44 @@ the non-streaming and streaming paths. The library's behavior was already correc
 error instead of crashing), but it's a good reminder that **tool implementations should coerce
 loosely-typed arguments defensively** rather than assume a provider enforced its own schema —
 `examples/ollama_demo.cpp`'s calculator does this.
-`AnthropicChat`'s tool-calling wire format and `GeminiChat` (all of it) are written to spec but
-haven't had the equivalent live smoke test in this environment — no Anthropic/Google credentials were
-available. If you have one and hit a wire-format bug, that's exactly the gap this note is flagging;
-please file an issue.
+### `AnthropicChat`/`GeminiChat`: verified against a documented-contract mock, not the real endpoints
+
+No `ANTHROPIC_API_KEY`/`GOOGLE_API_KEY` is available in this environment, so these two haven't had the
+`ollama_demo.cpp` treatment of an actual live call. Instead, `tests/test_anthropic_chat_live_contract.cpp`
+and `tests/test_gemini_chat_live_contract.cpp` spin up a minimal local HTTP server
+(`tests/support/mock_http_server.hpp`, real sockets, no mocking of `cpr`/`AnthropicChat`/`GeminiChat`
+themselves) that speaks each provider's *documented* wire contract — cross-checked against the official
+Anthropic Messages API and Gemini `generateContent` docs while writing these tests, which is worth being
+specific about since both had a real surprise: Gemini's `x-goog-api-key` header (which this project
+already used) is the *current* recommended auth method — older guides showing `?key=...` as a query
+parameter describe a legacy pattern. Anthropic's header is documented as `X-Api-Key`; HTTP header names
+are case-insensitive, so this project's lowercase `x-api-key` is equivalent, not a bug.
+
+Pointing the real `AnthropicChat`/`GeminiChat` at this mock via their `base_url` config exercises the
+part that pure wire-format unit tests can't: does the actual HTTP layer send the right URL, the right
+headers, and the right body, and does it correctly parse back a real response (including a tool-call
+one) and correctly surface a real error body on a non-200 status. All of that passed on the first run —
+correct `POST /v1/messages` and `POST /v1beta/models/{model}:generateContent` paths, correct
+`x-api-key`/`anthropic-version` and `x-goog-api-key` headers, correct request bodies (including
+`system`/`systemInstruction` and bound tools), and correct parsing of both text and tool-call responses.
+
+**What this does and doesn't prove:** it proves this client faithfully implements the documented
+contract end-to-end through real sockets — a meaningfully stronger claim than "the JSON conversion
+functions have unit tests," and the credible next-best thing to a live call without credentials. It does
+**not** prove Anthropic's or Google's actual servers behave identically to their own docs, and it can't
+catch undocumented behavior, model-specific quirks, or auth/rate-limit edge cases that only a real
+account would surface. If you have real credentials and hit a discrepancy between this and the actual
+API, that gap is exactly what this note is flagging — please file an issue.
+
+`mcp::McpClient` was verified against the official reference MCP server (`npx
+@modelcontextprotocol/server-everything`, spawned as a real subprocess over stdio) — `initialize()`,
+`list_tools()` (discovering all 13 of its tools), and `call_tool()` for both a success case (`get-sum`)
+and an error case (calling a nonexistent tool, confirming the error surfaces as a thrown
+`std::runtime_error` rather than hanging or crashing). `mcp::as_tools()` was then verified through a
+real `AgentExecutor` loop backed by local Ollama (`llama3.2`): asked "What is 47 plus 89? Use the
+get-sum tool," the model correctly chose the MCP-backed tool, langchain-cpp called out to the MCP
+server over its stdio transport, and the result (136) came back correctly — the full path, not just
+its parts in isolation. See `examples/mcp_client_demo.cpp`.
 
 ## Roadmap
 
@@ -424,20 +480,32 @@ libraries) is broken into lettered parts since it's too broad to land as one uni
       `RateLimiter` (thread-safe token-bucket requests-per-second limiter) + `RateLimitedChatModel`.
       Limits request frequency, not LLM token/cost usage — that needs model-specific tokenization,
       out of scope here.
-   8. ~~**Multi-modal messages**: image content blocks in `Message`~~ (this release) —
+   8. ~~**Multi-modal messages**: image content blocks in `Message`~~ (v0.13.0) —
       `core::ImageContent`/`Message::images`, additive alongside the existing text-only `.content`.
       `OpenAIChat`/`AzureOpenAIChat` encode them; `AnthropicChat`/`GeminiChat` throw a clear error
       instead of silently dropping them, since neither's wire-format support is implemented yet. Audio
       content blocks are still out of scope — no provider here has an audio API to target yet.
-   9. **MCP client/server support** — confirmed as an official package
-      (`@langchain/mcp-adapters` in LangChain.js) during the comparison, so this is a real gap, not
-      speculative scope; likely the most differentiated piece relative to other C++ LLM libraries.
-      Local inference via a direct llama.cpp/GGUF binding (no server in between) is related — Ollama
-      already works today through `OpenAIChat` + `base_url`, see `examples/ollama_demo.cpp`.
-   10. **Integration breadth**: more vector stores (FAISS, Qdrant, pgvector), document loaders (PDF,
-       CSV, web/HTML), and embeddings providers — the official libs' partner-package model, at a much
-       smaller scale.
-7. Live smoke tests for `AnthropicChat` tool-calling and `GeminiChat` against their real endpoints
+   9. ~~**MCP client and server support**~~ (v0.14.0 client, v0.17.0 server) — confirmed as an official
+      package (`@langchain/mcp-adapters` in LangChain.js) during the comparison, so this was a real gap,
+      not speculative scope. `mcp::McpClient` talks JSON-RPC 2.0 to an MCP server spawned as a subprocess
+      over stdio (the transport most local MCP servers use); `mcp::as_tools()` wraps its tools as
+      `langchain::tools::Tool` so they compose into `AgentExecutor` like any other tool. `mcp::McpServer`
+      is the other direction: serves a `ToolRegistry` over stdio for other MCP clients to call. Verified
+      live against the official reference server and through a real Ollama-backed agent loop
+      (`examples/mcp_client_demo.cpp`), and the client/server pair verified interoperating with each
+      other in an automated, offline round-trip test (`tests/test_mcp_server_roundtrip.cpp`). Non-stdio
+      transports (HTTP/SSE) are still open. Local inference via a direct llama.cpp/GGUF binding (no
+      server in between) is related but separate — Ollama already works today through `OpenAIChat` +
+      `base_url`, see `examples/ollama_demo.cpp`.
+   10. **Integration breadth** (partly done, v0.15.0): ~~a real vector store beyond
+       `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`); ~~a PDF document loader~~ —
+       `PdfLoader` (via poppler-cpp, one `Document` per page). Still open: Qdrant/pgvector vector
+       stores, CSV/web-HTML document loaders, and more embeddings providers — the official libs'
+       partner-package model, at a much smaller scale.
+7. ~~Contract-level HTTP verification for `AnthropicChat`/`GeminiChat`~~ (v0.16.0, partial) — both
+   verified end-to-end over real HTTP against a local mock implementing their documented contracts (see
+   above); live smoke tests against their *actual* endpoints still need real credentials and remain
+   open.
 
 ## Contributing
 

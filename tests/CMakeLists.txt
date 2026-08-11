@@ -26,7 +26,22 @@ add_executable(langchain_tests
     test_few_shot_prompt_template.cpp
     test_output_fixing_parser.cpp
     test_rate_limiter.cpp
+    test_mcp_jsonrpc.cpp
+    test_mcp_stdio_transport.cpp
+    test_faiss_vector_store.cpp
+    test_pdf_loader.cpp
+    support/mock_http_server.cpp
+    test_anthropic_chat_live_contract.cpp
+    test_gemini_chat_live_contract.cpp
 )
+# test_mcp_server_roundtrip.cpp needs the built mcp_server_demo binary --
+# only meaningful (and only buildable, since it needs the real path) when
+# examples are also being built.
+if(TARGET mcp_server_demo)
+    target_sources(langchain_tests PRIVATE test_mcp_server_roundtrip.cpp)
+    target_compile_definitions(langchain_tests PRIVATE MCP_SERVER_DEMO_PATH="$<TARGET_FILE:mcp_server_demo>")
+endif()
+
 target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest::gtest_main)
 
 # Lets tests reach internal (non-public-API) provider wire-format headers
@@ -34,7 +49,7 @@ target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest
 # aren't installed/exposed under include/, but unit-testing the pure
 # conversion logic is valuable where there's no live endpoint to
 # smoke-test against (see test_gemini_wire_format.cpp).
-target_include_directories(langchain_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(langchain_tests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
 
 include(GoogleTest)
 gtest_discover_tests(langchain_tests)

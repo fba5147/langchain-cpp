@@ -4,6 +4,103 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet follow strict
 semantic versioning (pre-1.0, breaking changes can land in a minor bump).
 
+## [0.17.0] — MCP server
+
+Completes Part 9 of the roadmap-item-6 gap list: `mcp::McpClient` (v0.14.0) covered connecting *to* an
+MCP server; this adds the other half, exposing langchain-cpp's own tools *as* one.
+
+- `mcp::McpServer` — wraps a `tools::ToolRegistry` and serves it over stdio: reads newline-delimited
+  JSON-RPC requests from an `std::istream` (real stdin by default), dispatches
+  `initialize`/`tools/list`/`tools/call`, and writes responses to an `std::ostream` (real stdout by
+  default). Symmetric with `McpClient` — only the tools capability, no resources/prompts/sampling.
+- New JSON-RPC framing on the server side (`jsonrpc.hpp`): `is_request`/`parse_request` (a request has
+  both `method` and `id`; a notification has `method` but no `id`), `build_success_response`,
+  `build_error_response`.
+- New MCP-specific server-side shapes (`mcp_protocol.hpp`): `build_initialize_result`,
+  `build_tools_list_result`, `build_call_tool_result` (encodes a `Tool`'s `Result<json>` — a string
+  value becomes the text verbatim, anything else is JSON-dumped into it, an error becomes
+  `isError: true` — the exact mirror of how `McpClient::call_tool` decodes a response).
+- `examples/mcp_server_demo.cpp` — a real MCP server exposing a `calculator` tool, meant to be spawned
+  by an MCP client (an external one, or langchain-cpp's own).
+- `tests/test_mcp_server_roundtrip.cpp` — rather than only unit-testing the server's pure functions, this
+  spawns the *built* `mcp_server_demo` binary via `McpClient` and does a real round trip: `list_tools`
+  discovers the calculator, `call_tool` computes a real result, calling an unknown tool throws, and
+  `mcp::as_tools()` wraps it for an agent — this project's own client and server actually interoperating,
+  verified automatically and offline (no npx/network needed), unlike `examples/mcp_client_demo.cpp`'s
+  live run against the external reference server.
+- 14 new tests (10 pure-function, 4 round-trip).
+
+## [0.16.0] — AnthropicChat/GeminiChat HTTP-layer contract tests
+
+Addresses a real credibility gap: the README admitted `AnthropicChat`/`GeminiChat` were "written to
+spec" but never exercised over real HTTP, with no way to close that without API credentials.
+
+- `tests/support/mock_http_server.hpp/.cpp` — a minimal HTTP/1.1 server (raw POSIX sockets, single
+  connection at a time, no TLS) for tests: binds to an OS-assigned port on 127.0.0.1 and runs a handler
+  on a background thread, so a real `ChatModel` can be pointed at it via `base_url` and exercised over
+  actual sockets rather than an in-process mock.
+- While writing these tests, cross-checked both providers' implementations against the current official
+  docs (Anthropic Messages API, Google's `generateContent` REST reference) rather than trusting memory —
+  this surfaced that Gemini's `x-goog-api-key` header (already what this project uses) is the *current*
+  recommended auth method, not the legacy `?key=...` query parameter older guides show. No wire-format
+  bugs found; both implementations already matched the documented contract exactly.
+- `tests/test_anthropic_chat_live_contract.cpp` / `tests/test_gemini_chat_live_contract.cpp` — 8 tests
+  verifying, over a real HTTP round trip: correct URL (`POST /v1/messages`,
+  `POST /v1beta/models/{model}:generateContent`), correct headers (`x-api-key`/`anthropic-version`,
+  `x-goog-api-key`), correct request bodies (including `system`/`systemInstruction` and bound tools),
+  correct parsing of both text and tool-call responses, and correct error surfacing (the server's own
+  error body) on a non-200 status. All passed on the first run.
+- This is deliberately not overclaimed as "verified live": it proves both clients faithfully implement
+  the documented contract end-to-end through real sockets, not that Anthropic's/Google's actual servers
+  behave identically to their own docs (auth/rate-limit edge cases and undocumented behavior are still
+  unverified — see the README section this adds). Closing that last gap still needs real credentials.
+
+## [0.15.0] — FAISS vector store and PDF loader
+
+Part 10 of the roadmap-item-6 gap list (partial — integration breadth).
+
+- `rag::FaissVectorStore` — a `VectorStore` backed by FAISS's `IndexFlatIP`: exact nearest-neighbor
+  search via inner product over L2-normalized vectors (i.e. cosine similarity), rather than
+  `InMemoryVectorStore`'s own hand-rolled brute-force loop. `faiss::Index` is only forward-declared in
+  the public header, so FAISS's own headers don't leak into every translation unit that includes it.
+- `rag::PdfLoader` — loads a PDF as one `Document` per page (mirrors LangChain's `PyPDFLoader`), tagged
+  with `metadata["source"]`/`metadata["page"]`. Uses poppler-cpp; also kept out of the public header.
+- CMake now locates FAISS (its CMake config target name isn't consistent across
+  vcpkg/Homebrew — vcpkg exports `faiss::faiss`, Homebrew's bottle exports a bare `faiss`; both are
+  tried, falling back to a manual `find_path`/`find_library` as a last resort) and poppler-cpp (via
+  `pkg_check_modules`, the same approach poppler's own vcpkg port documents using). Added `faiss` and
+  `poppler` to `vcpkg.json`; the vcpkg path itself wasn't run end-to-end in this environment (that means
+  building both from source via vcpkg), unlike the Homebrew path, which was.
+- `PdfLoader`'s tests use hand-crafted, byte-exact minimal PDF fixtures (correct xref table and all)
+  embedded directly in the test file, rather than shipping binary PDF files or depending on an external
+  PDF-generation tool — verified to open correctly with `pdftotext` while building this.
+- 9 new tests (5 for `FaissVectorStore`, 4 for `PdfLoader`).
+
+## [0.14.0] — MCP client
+
+Part 9 of the roadmap-item-6 gap list.
+
+- `mcp::McpClient` — talks JSON-RPC 2.0 to an MCP (Model Context Protocol) server over stdio: spawns it
+  as a subprocess (POSIX fork/exec/pipe; the project's CI only targets ubuntu-latest/macos-latest, so no
+  Windows path), then `initialize()` (handshake), `list_tools()`, and `call_tool()`. Resources, prompts,
+  and sampling aren't implemented — out of scope for what `AgentExecutor` needs.
+- `mcp::as_tools(client)` — wraps every tool a connected client's server exposes as a
+  `langchain::tools::Tool` (a `FunctionTool` that calls back into the client), so they drop straight into
+  a `ToolRegistry` and get called by `AgentExecutor` like any other tool. Mirrors LangChain.js's
+  `@langchain/mcp-adapters`.
+- The generic JSON-RPC framing (`build_request`/`parse_response`/...) and the MCP-specific message
+  shapes (`build_initialize_params`/`parse_tools_list_result`/`parse_call_tool_result`) are both pure,
+  directly-testable functions, same reasoning as the provider wire-format modules. The stdio transport
+  itself is tested against real child processes (`/bin/cat`, `/bin/echo`) rather than a mock, so the
+  actual fork/exec/pipe code path is exercised for real.
+- `examples/mcp_client_demo.cpp` — verified live end-to-end against the official reference server (`npx
+  @modelcontextprotocol/server-everything`): `initialize()`, `list_tools()` (discovering all 13 tools),
+  `call_tool()` for both a success case and an error case (a nonexistent tool name, confirming it
+  surfaces as a thrown `std::runtime_error`), and then a real `AgentExecutor` loop backed by local Ollama
+  (`llama3.2`) correctly choosing the MCP-backed `get-sum` tool and getting the right answer back through
+  the full stdio round trip.
+- 17 new tests.
+
 ## [0.13.0] — Multi-modal messages
 
 Part 8 of the roadmap-item-6 gap list.

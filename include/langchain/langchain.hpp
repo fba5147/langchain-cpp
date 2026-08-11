@@ -2,9 +2,9 @@
 
 // Convenience umbrella header pulling in the current milestone's public API:
 // core types, the Runnable/`|` composition mechanism, prompt templates,
-// output parsers, tools/agents, the RAG stack, and the chat providers
-// (Mock, OpenAI, Azure OpenAI, Anthropic, Gemini, plus OpenAI-compatible
-// presets for Groq/Mistral/DeepSeek).
+// output parsers, tools/agents, an MCP client, the RAG stack, and the chat
+// providers (Mock, OpenAI, Azure OpenAI, Anthropic, Gemini, plus
+// OpenAI-compatible presets for Groq/Mistral/DeepSeek).
 
 #include "langchain/core/callbacks.hpp"
 #include "langchain/core/document.hpp"
@@ -30,6 +30,10 @@
 #include "langchain/llm/in_memory_chat_model_cache.hpp"
 #include "langchain/llm/rate_limited_chat_model.hpp"
 #include "langchain/llm/rate_limiter.hpp"
+
+#include "langchain/mcp/mcp_client.hpp"
+#include "langchain/mcp/mcp_server.hpp"
+#include "langchain/mcp/mcp_tools.hpp"
 
 #include "langchain/parsers/json_parser.hpp"
 #include "langchain/parsers/output_fixing_parser.hpp"
@@ -59,8 +63,10 @@
 #include "langchain/rag/format_documents.hpp"
 #include "langchain/rag/loaders/loader.hpp"
 #include "langchain/rag/loaders/markdown_loader.hpp"
+#include "langchain/rag/loaders/pdf_loader.hpp"
 #include "langchain/rag/loaders/text_loader.hpp"
 #include "langchain/rag/retrievers/retriever.hpp"
 #include "langchain/rag/splitters/recursive_character_text_splitter.hpp"
+#include "langchain/rag/vectorstores/faiss_vector_store.hpp"
 #include "langchain/rag/vectorstores/in_memory_vector_store.hpp"
 #include "langchain/rag/vectorstores/vector_store.hpp"

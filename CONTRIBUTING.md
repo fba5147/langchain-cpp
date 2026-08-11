@@ -7,8 +7,8 @@ library.
 
 ## Building and testing
 
-Requires a C++20 compiler, CMake 3.21+, and [vcpkg](https://github.com/microsoft/vcpkg) (dependencies:
-`nlohmann-json`, `cpr`, `gtest`).
+Requires a C++20 compiler, CMake 3.21+, `pkg-config`, and [vcpkg](https://github.com/microsoft/vcpkg)
+(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`).
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
@@ -18,9 +18,13 @@ ctest --test-dir build --output-on-failure
 ```
 
 If you don't have vcpkg set up, the same dependencies are available via Homebrew
-(`brew install nlohmann-json cpr googletest`) — configure with
+(`brew install nlohmann-json cpr googletest faiss poppler pkg-config`) — configure with
 `cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=/usr/local` (or `/opt/homebrew` on Apple Silicon
-with the ARM Homebrew prefix) instead of the vcpkg preset.
+with the ARM Homebrew prefix) instead of the vcpkg preset. This is the path actually exercised while
+building this project (see the README's Ollama/local-testing notes) — the vcpkg path is declared and
+should work (`faiss`/`poppler` are both real vcpkg ports, and poppler's own port documents the same
+`pkg_check_modules(poppler-cpp)` this project's CMakeLists.txt uses), but hasn't been run end-to-end
+here, since that means building FAISS/poppler-cpp themselves from source via vcpkg.
 
 Run an example or two to sanity-check behavior beyond what the unit tests cover — see the list in the
 README's "Building" section. Several examples (`ollama_demo`, `basic_chat` with an API key) exercise
@@ -62,11 +66,14 @@ concrete things worth doing:
 Roadmap item 6 (README) is a lettered list of gaps identified against official LangChain
 (Python)/LangChain.js; parts 1 (`RunnableParallel`/`RunnablePassthrough`/`RunnableBranch`), 2
 (`ChatModel::stream()`), 3 (callbacks), 4 (`CachingChatModel`), 5 (`ChatModelWithHistory`), 6 (few-shot
-prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), and 8 (`Message::images`)
-are done, so parts 9-10 are the open ones, roughly in priority order:
+prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), 8 (`Message::images`), and 9
+(`mcp::McpClient` + `mcp::McpServer`) are done. Part 10 (integration breadth) is partly done
+(`FaissVectorStore`, `PdfLoader`); concrete things worth doing, roughly in priority order:
 
-- **MCP client/server support** (part 9) — confirmed as an official package
-  (`@langchain/mcp-adapters`), likely the most differentiated piece relative to other C++ LLM libraries.
+- **More integration breadth** (part 10) — `FaissVectorStore` and `PdfLoader` shipped; still open:
+  Qdrant/pgvector vector stores, CSV/web-HTML document loaders, more embeddings providers.
+- **An HTTP/SSE transport for MCP** — both `McpClient` and `McpServer` (part 9) only speak stdio today
+  (the common case for local servers); a remote/HTTP transport is a natural, separable follow-up.
 - **A LangSmith-equivalent tracing backend** — part 3 shipped the hook points
   (`CallbackHandler`/`CallbackManager`/`CallbackingChatModel`/`CallbackingTool`) and a console printer,
   but nothing that persists/visualizes traces. A `CallbackHandler` that writes structured JSON lines
@@ -74,15 +81,18 @@ are done, so parts 9-10 are the open ones, roughly in priority order:
 - **Streaming for `AnthropicChat`/`GeminiChat`** — only `OpenAIChat`/`AzureOpenAIChat` got real
   incremental streaming (part 2); the other two still use `ChatModel::stream()`'s default (one
   synthesized final chunk), same caveat as their non-streaming tool-calling below.
-- **Live coverage for `AnthropicChat` tool-calling and `GeminiChat`** — both are written to spec
-  (pure request/response conversion has unit tests for both now — `tests/test_gemini_wire_format.cpp`
-  and `tests/test_anthropic_wire_format.cpp`) but neither has had the equivalent of the
-  `ollama_demo.cpp` live smoke test that `OpenAIChat` got — no Anthropic/Google credentials were
-  available while building this. If you have one, running `examples/more_providers_demo.cpp` (Gemini)
-  or a quick Anthropic tool-calling script against a real key and reporting back what broke is
-  high-value.
-- **A real vector store integration** (FAISS, Qdrant, pgvector, ...) alongside `InMemoryVectorStore`
-  (part 10).
+- **Live coverage for `AnthropicChat` tool-calling and `GeminiChat` against the real endpoints** — both
+  are written to spec (pure request/response conversion has unit tests —
+  `tests/test_gemini_wire_format.cpp`/`tests/test_anthropic_wire_format.cpp`) and their full HTTP layer
+  (URL, headers, request/response bodies, error handling) is verified end-to-end against a local mock
+  server that implements the documented contract (`tests/test_anthropic_chat_live_contract.cpp`,
+  `tests/test_gemini_chat_live_contract.cpp` — see the README section on what this does and doesn't
+  prove) — but neither has had the equivalent of the `ollama_demo.cpp` live smoke test against the
+  *actual* api.anthropic.com/generativelanguage.googleapis.com, since no Anthropic/Google credentials
+  were available while building this. If you have one, running `examples/more_providers_demo.cpp`
+  (Gemini) or a quick Anthropic tool-calling script against a real key and reporting back what broke is
+  high-value — that's specifically the risk the mock can't cover (auth/rate-limit edge cases,
+  undocumented server behavior).
 - **Image support for `AnthropicChat`/`GeminiChat`** — both throw on `Message::images` today (part 8
   shipped `OpenAIChat`/`AzureOpenAIChat` support only); wiring up their image content-block formats is
   a natural, self-contained follow-up.

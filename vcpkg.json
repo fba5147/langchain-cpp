@@ -4,6 +4,8 @@
   "dependencies": [
     "nlohmann-json",
     "cpr",
-    "gtest"
+    "gtest",
+    "faiss",
+    "poppler"
   ]
 }

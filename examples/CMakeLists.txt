@@ -40,3 +40,9 @@ target_link_libraries(rate_limit_demo PRIVATE langchain::core)
 
 add_executable(multimodal_demo multimodal_demo.cpp)
 target_link_libraries(multimodal_demo PRIVATE langchain::core)
+
+add_executable(mcp_client_demo mcp_client_demo.cpp)
+target_link_libraries(mcp_client_demo PRIVATE langchain::core)
+
+add_executable(mcp_server_demo mcp_server_demo.cpp)
+target_link_libraries(mcp_server_demo PRIVATE langchain::core)
