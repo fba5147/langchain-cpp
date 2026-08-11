@@ -8,14 +8,9 @@ Set Theme "Dracula"
 Set Padding 20
 Set TypingSpeed 45ms
 
-Type "./build/examples/agent_demo"
+# Requires `ollama serve` running locally with llama3.2 + nomic-embed-text
+# pulled -- this is OpenAIChat/OpenAIEmbeddings talking to a real local
+# server via Ollama's OpenAI-compatible API, not a mocked/scripted run.
+Type "./build/examples/ollama_demo"
 Enter
-Sleep 2500ms
-
-Type "clear"
-Enter
-Sleep 300ms
-
-Type "./build/examples/rag_demo"
-Enter
-Sleep 3000ms
+Sleep 7000ms
