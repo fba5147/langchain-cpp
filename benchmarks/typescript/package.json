@@ -1,0 +1,14 @@
+{
+  "name": "langchain-cpp-benchmarks-typescript",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TypeScript (@langchain/core) side of the cross-language benchmark comparison",
+  "type": "module",
+  "scripts": {
+    "bench": "node bench.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^1.2.5"
+  }
+}

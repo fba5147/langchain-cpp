@@ -7,6 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LANGCHAIN_BUILD_EXAMPLES "Build example programs" ON)
 option(LANGCHAIN_BUILD_TESTS "Build unit tests" ON)
+option(LANGCHAIN_BUILD_BENCHMARKS "Build benchmark executables" ON)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
@@ -45,4 +46,8 @@ endif()
 if(LANGCHAIN_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(LANGCHAIN_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks/cpp)
 endif()

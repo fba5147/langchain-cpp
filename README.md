@@ -1,5 +1,8 @@
 # langchain-cpp
 
+[![CI](https://github.com/fba5147/langchain-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/fba5147/langchain-cpp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An unofficial, native C++ take on [LangChain](https://github.com/langchain-ai/langchain): composable
 building blocks for working with LLMs — chat models, prompt templates, output parsers, and (eventually)
 tools, agents, RAG, and MCP. Not affiliated with or endorsed by the LangChain project.
@@ -185,6 +188,23 @@ Roughly in build order; each is its own milestone rather than all-at-once:
 7. Streaming, async, cancellation, retries, callbacks, tracing, and a `RunnableParallel`/passthrough
    combinator (needed for a one-line `retriever | prompt | model | parser` RAG chain)
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for build/test instructions, coding
+conventions, and where the roadmap most needs help. Please also read the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Benchmarks
+
+[benchmarks/RESULTS.md](benchmarks/RESULTS.md) has cold-start and mocked-chain-throughput comparisons
+against Python LangChain (`langchain-core`) and TypeScript LangChain (`@langchain/core`), a recorded
+run, and how to reproduce it with `benchmarks/run_all.sh`. Full LLM-call latency isn't benchmarked —
+it's dominated by network/API time, identical across languages, so it wouldn't measure anything about
+the frameworks themselves. One-line summary of the recorded run: C++ cold-starts ~6–23x faster and
+pushes ~5–90x the throughput of TypeScript/Python respectively on a no-network mocked chain — see the
+caveats in that file (notably, that run's C++ binary wasn't even native arm64) before citing the exact
+numbers.
+
 ## License
 
-TBD.
+[MIT](LICENSE)

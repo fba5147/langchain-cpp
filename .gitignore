@@ -6,3 +6,5 @@ compile_commands.json
 CMakeUserPresets.json
 .vscode/
 .idea/
+
+node_modules/
