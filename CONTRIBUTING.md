@@ -27,19 +27,28 @@ should work (`faiss`/`poppler` are both real vcpkg ports, and poppler's own port
 here, since that means building FAISS/poppler-cpp themselves from source via vcpkg.
 
 Run an example or two to sanity-check behavior beyond what the unit tests cover — see the list in the
-README's "Building" section. Several examples (`ollama_demo`, `basic_chat` with an API key) exercise
-real network calls; `mock_chain`, `structured_output`, `tools_demo`, `agent_demo`, and `rag_demo` run
-fully offline.
+README's "Building" section. Most examples (`mock_chain`, `structured_output`, `tools_demo`,
+`agent_demo`, `rag_demo`, `callbacks_demo`, `caching_demo`, `chat_history_demo`, `few_shot_demo`,
+`rate_limit_demo`, `multimodal_demo`) run fully offline against `MockChat`. `ollama_demo` and
+`basic_chat`/`more_providers_demo`/`mcp_client_demo` (with an API key, or `ollama serve` running
+locally) exercise real network calls. `mcp_server_demo` isn't meant to be run directly at all — it
+speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
+`tests/test_mcp_server_roundtrip.cpp`).
 
 ## Before opening a PR
 
 - Add or update tests for behavior you change — every module in this codebase has unit tests, and new
   code should too.
 - Run the full test suite (`ctest --test-dir build`) and confirm it's green.
-- If you touch a provider's wire-format code (`OpenAIChat`, `AnthropicChat`, `OpenAIEmbeddings`), sanity
-  check it against a real endpoint if you can (an OpenAI-compatible local server via Ollama is a free,
-  fast way to do this — see `examples/ollama_demo.cpp`). Wire-format bugs don't show up in unit tests
-  that only exercise `MockChat`.
+- If you touch a provider's wire-format code, sanity check it beyond `MockChat`-only unit tests, which
+  won't catch real wire-format bugs. For `OpenAIChat`/`AzureOpenAIChat`/`OpenAIEmbeddings`, an
+  OpenAI-compatible local server via Ollama is a free, fast way to do this — see
+  `examples/ollama_demo.cpp`. For `AnthropicChat`/`GeminiChat`, where no local server speaks their wire
+  format, run (and extend, if your change touches new request/response shapes)
+  `tests/test_anthropic_chat_live_contract.cpp`/`tests/test_gemini_chat_live_contract.cpp` — these spin
+  up a local mock server (`tests/support/mock_http_server.hpp`) implementing the documented contract and
+  exercise the real HTTP layer against it. If you have real Anthropic/Google credentials, testing
+  against the actual endpoint too is even more valuable (see the "Where to help" note on this below).
 - Keep commits and PRs scoped to one change; separate refactors from behavior changes.
 
 ## Code conventions
