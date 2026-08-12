@@ -20,11 +20,18 @@ jobs:
         if: runner.os == 'Linux'
         # gfortran is needed to build vcpkg's reference BLAS/LAPACK ports,
         # which faiss depends on; pkg-config is needed to locate poppler-cpp.
-        run: sudo apt-get update && sudo apt-get install -y ninja-build pkg-config gfortran
+        # autoconf/autoconf-archive/automake/libtool are needed to build
+        # gperf from source via vcpkg -- a build-time tool for fontconfig,
+        # which poppler pulls in by default (font-configuration feature).
+        # Without these, vcpkg fails with an explicit "gperf currently
+        # requires the following programs from the system package manager"
+        # error before ever reaching this project's own CMakeLists.txt.
+        run: sudo apt-get update && sudo apt-get install -y ninja-build pkg-config gfortran autoconf autoconf-archive automake libtool
 
       - name: Install Ninja and native build deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install ninja pkg-config
+        # See the Linux step above for why autoconf/autoconf-archive/automake/libtool are needed.
+        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
 
       - name: Cache vcpkg
         uses: actions/cache@v4
