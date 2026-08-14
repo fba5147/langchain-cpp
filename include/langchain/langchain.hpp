@@ -69,4 +69,5 @@
 #include "langchain/rag/splitters/recursive_character_text_splitter.hpp"
 #include "langchain/rag/vectorstores/faiss_vector_store.hpp"
 #include "langchain/rag/vectorstores/in_memory_vector_store.hpp"
+#include "langchain/rag/vectorstores/qdrant_vector_store.hpp"
 #include "langchain/rag/vectorstores/vector_store.hpp"

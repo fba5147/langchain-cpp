@@ -33,6 +33,8 @@ add_executable(langchain_tests
     support/mock_http_server.cpp
     test_anthropic_chat_live_contract.cpp
     test_gemini_chat_live_contract.cpp
+    test_qdrant_wire_format.cpp
+    test_qdrant_vector_store_live.cpp
 )
 # test_mcp_server_roundtrip.cpp needs the built mcp_server_demo binary --
 # only meaningful (and only buildable, since it needs the real path) when

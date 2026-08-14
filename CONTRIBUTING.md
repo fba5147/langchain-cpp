@@ -34,9 +34,15 @@ README's "Building" section. Most examples (`mock_chain`, `structured_output`, `
 `agent_demo`, `rag_demo`, `callbacks_demo`, `caching_demo`, `chat_history_demo`, `few_shot_demo`,
 `rate_limit_demo`, `multimodal_demo`) run fully offline against `MockChat`. `ollama_demo` and
 `basic_chat`/`more_providers_demo`/`mcp_client_demo` (with an API key, or `ollama serve` running
-locally) exercise real network calls. `mcp_server_demo` isn't meant to be run directly at all — it
-speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
+locally) exercise real network calls. `qdrant_demo` needs a real Qdrant server (`docker run -p 6333:6333
+qdrant/qdrant`) but otherwise runs offline (`MockEmbeddings`). `mcp_server_demo` isn't meant to be run
+directly at all — it speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
 `tests/test_mcp_server_roundtrip.cpp`).
+
+`tests/test_qdrant_vector_store_live.cpp` follows the same pattern as the mock-server contract tests
+below, but against a *real* dependency instead of a mock: it `GTEST_SKIP()`s (not fails) when no Qdrant
+server is reachable at `QDRANT_URL` (default `http://localhost:6333`), so `ctest` stays green without
+Docker running, but exercises the real HTTP round trip end-to-end when it is.
 
 ## Before opening a PR
 
@@ -80,10 +86,11 @@ Roadmap item 6 (README) is a lettered list of gaps identified against official L
 (`ChatModel::stream()`), 3 (callbacks), 4 (`CachingChatModel`), 5 (`ChatModelWithHistory`), 6 (few-shot
 prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), 8 (`Message::images`), and 9
 (`mcp::McpClient` + `mcp::McpServer`) are done. Part 10 (integration breadth) is partly done
-(`FaissVectorStore`, `PdfLoader`); concrete things worth doing, roughly in priority order:
+(`FaissVectorStore`, `QdrantVectorStore`, `PdfLoader`); concrete things worth doing, roughly in priority
+order:
 
-- **More integration breadth** (part 10) — `FaissVectorStore` and `PdfLoader` shipped; still open:
-  Qdrant/pgvector vector stores, CSV/web-HTML document loaders, more embeddings providers.
+- **More integration breadth** (part 10) — `FaissVectorStore`, `QdrantVectorStore`, and `PdfLoader`
+  shipped; still open: pgvector vector store, CSV/web-HTML document loaders, more embeddings providers.
 - **Split `langchain_core` into multiple library targets** — adding FAISS/poppler-cpp as dependencies of
   the single monolithic `langchain_core` static library means every consumer (every example, the
   benchmark binary) now links `libfaiss`/`libpoppler-cpp` and pays their dynamic-linker load cost at

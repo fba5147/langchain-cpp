@@ -12,7 +12,7 @@ goal is an idiomatic C++ library, not a transliteration.
 
 ![A terminal recording of examples/ollama_demo running against a real local Ollama server: plain chat, streaming, a tool-calling agent answering "123 * 456 is 56088.", a streamed tool call, and embeddings -- no API key involved](docs/demo.gif)
 
-## Status: v0.17.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, PDF) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
+## Status: v0.18.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, PDF) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
 
 What exists today:
 
@@ -146,7 +146,11 @@ What exists today:
     API).
   - `VectorStore` / `InMemoryVectorStore` (brute-force cosine similarity) / `FaissVectorStore` (FAISS's
     `IndexFlatIP` over L2-normalized vectors — exact nearest-neighbor search via a real vector-search
-    library instead of the store's own loop) — `store->as_retriever(k)` wraps either as a `Retriever`.
+    library instead of the store's own loop) / `QdrantVectorStore` (a real remote vector database over
+    its REST API — data survives this process exiting, and can be shared across processes/machines,
+    unlike the other two; the collection is created lazily on first `add_documents()`, or reused as-is
+    if one with the same name already exists) — `store->as_retriever(k)` wraps any of the three as a
+    `Retriever`.
   - `Retriever` — a `Runnable<string, vector<Document>>`, so it composes into a chain like any other
     Runnable.
   - `FormatDocumentsAsString` — joins retrieved `Document`s into one string (`Runnable<vector<Document>,
@@ -327,17 +331,24 @@ std::string answer = rag_chain->invoke("What is RAII?");
 
 That composes because `RunnableParallel<Input, std::string>`'s output type — `unordered_map<string,
 string>` — is exactly `PromptValues`, so it flows straight into a `ChatPromptTemplate` with `{context}`
-and `{question}` placeholders, no adapter needed.
+and `{question}` placeholders, no adapter needed. `InMemoryVectorStore` here is interchangeable with
+`FaissVectorStore` or `QdrantVectorStore` — same interface, so nothing else in the chain changes:
+
+```cpp
+auto store = std::make_shared<rag::QdrantVectorStore>(std::make_shared<rag::OpenAIEmbeddings>(),
+                                                        rag::QdrantConfig{.collection_name = "my_docs"});
+```
 
 See `examples/mock_chain.cpp` and `examples/structured_output.cpp` for fully offline versions of the
 first two snippets above (no API key needed), `examples/basic_chat.cpp` for a real provider call,
 `examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema,
 `examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set),
 `examples/rag_demo.cpp` for the full RAG pipeline (offline with `MockEmbeddings`, or live with
-`OPENAI_API_KEY` set), and `examples/ollama_demo.cpp` for `OpenAIChat`/`OpenAIEmbeddings` pointed at a
-local [Ollama](https://ollama.com) server instead of `api.openai.com` (chat, tool-calling agent loop,
-and embeddings, all verified end-to-end against a real `llama3.2` + `nomic-embed-text` server — see
-note below on local-model tool-calling reliability).
+`OPENAI_API_KEY` set), `examples/qdrant_demo.cpp` for the same pipeline against a real Qdrant server
+(verified persisting across separate runs of the binary), and `examples/ollama_demo.cpp` for
+`OpenAIChat`/`OpenAIEmbeddings` pointed at a local [Ollama](https://ollama.com) server instead of
+`api.openai.com` (chat, tool-calling agent loop, and embeddings, all verified end-to-end against a real
+`llama3.2` + `nomic-embed-text` server — see note below on local-model tool-calling reliability).
 
 ## Building
 
@@ -372,6 +383,8 @@ Run the examples:
 ./build/examples/mcp_client_demo   # requires `npx` (Node.js) and `ollama serve` running locally
 # examples/mcp_server_demo isn't meant to be run directly (it speaks stdio JSON-RPC, not a
 # human-typed REPL) -- it's spawned by an MCP client, see tests/test_mcp_server_roundtrip.cpp
+./build/examples/qdrant_demo   # requires `docker run -p 6333:6333 qdrant/qdrant`; run it twice --
+                                # the second run detects the existing data and skips re-indexing
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 GOOGLE_API_KEY=... ./build/examples/basic_chat
@@ -497,11 +510,13 @@ libraries) is broken into lettered parts since it's too broad to land as one uni
       transports (HTTP/SSE) are still open. Local inference via a direct llama.cpp/GGUF binding (no
       server in between) is related but separate — Ollama already works today through `OpenAIChat` +
       `base_url`, see `examples/ollama_demo.cpp`.
-   10. **Integration breadth** (partly done, v0.15.0): ~~a real vector store beyond
-       `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`); ~~a PDF document loader~~ —
-       `PdfLoader` (via poppler-cpp, one `Document` per page). Still open: Qdrant/pgvector vector
-       stores, CSV/web-HTML document loaders, and more embeddings providers — the official libs'
-       partner-package model, at a much smaller scale.
+   10. **Integration breadth** (partly done, v0.15.0/v0.18.0): ~~a real vector store beyond
+       `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`, in-process) and
+       `QdrantVectorStore` (a real remote vector database over its REST API — verified live against a
+       real Qdrant server, `docker run -p 6333:6333 qdrant/qdrant`, including that data survives a
+       process restart, see `examples/qdrant_demo.cpp`); ~~a PDF document loader~~ — `PdfLoader` (via
+       poppler-cpp, one `Document` per page). Still open: pgvector, CSV/web-HTML document loaders, and
+       more embeddings providers — the official libs' partner-package model, at a much smaller scale.
 7. ~~Contract-level HTTP verification for `AnthropicChat`/`GeminiChat`~~ (v0.16.0, partial) — both
    verified end-to-end over real HTTP against a local mock implementing their documented contracts (see
    above); live smoke tests against their *actual* endpoints still need real credentials and remain

@@ -113,6 +113,8 @@ add_library(langchain_core
     src/rag/vectorstores/vector_store.cpp
     src/rag/vectorstores/in_memory_vector_store.cpp
     src/rag/vectorstores/faiss_vector_store.cpp
+    src/rag/vectorstores/qdrant_wire_format.cpp
+    src/rag/vectorstores/qdrant_vector_store.cpp
     src/rag/loaders/pdf_loader.cpp
     src/rag/retrievers/retriever.cpp
     src/rag/format_documents.cpp

@@ -46,3 +46,7 @@ target_link_libraries(mcp_client_demo PRIVATE langchain::core)
 
 add_executable(mcp_server_demo mcp_server_demo.cpp)
 target_link_libraries(mcp_server_demo PRIVATE langchain::core)
+
+add_executable(qdrant_demo qdrant_demo.cpp)
+target_link_libraries(qdrant_demo PRIVATE langchain::core)
+target_compile_definitions(qdrant_demo PRIVATE EXAMPLES_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

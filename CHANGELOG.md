@@ -4,6 +4,35 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet follow strict
 semantic versioning (pre-1.0, breaking changes can land in a minor bump).
 
+## [0.18.0] — Qdrant vector store
+
+Part 10 of the roadmap-item-6 gap list (further integration breadth, alongside `FaissVectorStore`/
+`PdfLoader` from v0.15.0).
+
+- `rag::QdrantVectorStore` — a `VectorStore` backed by a real Qdrant server over its REST API. Unlike
+  `InMemoryVectorStore`/`FaissVectorStore` (both in-process), data lives on a separate process and
+  survives this one exiting, and can be shared across processes or machines — verified for real:
+  indexed documents with one `QdrantVectorStore` instance, destroyed it, and searched successfully from
+  a second instance pointed at the same collection name (simulating a process restart), against an
+  actual local Qdrant server (`docker run -p 6333:6333 qdrant/qdrant`).
+- The collection is created lazily on first `add_documents()` (once the embedding dimension is known)
+  or reused as-is if one with the configured name already exists. Qdrant's "Cosine" distance metric
+  normalizes vectors internally, so no client-side normalization is needed (unlike `FaissVectorStore`'s
+  `IndexFlatIP`, which does need it). Point IDs are randomly generated UUIDv4s, since Qdrant requires
+  point IDs to be either an unsigned integer or a UUID — a plain incrementing counter or arbitrary
+  string won't do, confirmed by testing against the real API and hitting its validation error directly.
+- `src/rag/vectorstores/qdrant_wire_format.hpp/.cpp` — the request/response conversion logic, kept pure
+  and separately unit-tested, same reasoning as the provider wire-format modules.
+- `examples/qdrant_demo.cpp` — the same load/split/index/retrieve/answer pipeline as `rag_demo.cpp`, but
+  against a real Qdrant server; run twice, the second run detects the collection already has data (via
+  a probe search) and skips re-indexing rather than inserting duplicate points, since
+  `QdrantVectorStore` itself doesn't dedupe on `add_documents()`.
+- `tests/test_qdrant_vector_store_live.cpp` — live tests against a real Qdrant server, `GTEST_SKIP()`ing
+  (not failing) when none is reachable, so `ctest` stays green without Docker running while still
+  exercising the real HTTP round trip when it is. All passed against a real local instance while
+  building this, including the cross-instance persistence test above.
+- 12 new tests (7 pure wire-format, 5 live).
+
 ## [0.17.0] — MCP server
 
 Completes Part 9 of the roadmap-item-6 gap list: `mcp::McpClient` (v0.14.0) covered connecting *to* an
