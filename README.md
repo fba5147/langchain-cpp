@@ -10,7 +10,7 @@ tools, agents, RAG, and MCP. Not affiliated with or endorsed by the LangChain pr
 The Python library is the reference for concepts and API shape, not a spec to mirror line-for-line — the
 goal is an idiomatic C++ library, not a transliteration.
 
-![A terminal recording of examples/ollama_demo running against a real local Ollama server: plain chat, streaming, a tool-calling agent answering "123 * 456 is 56088.", a streamed tool call, and embeddings -- no API key involved](docs/demo.gif)
+![A terminal recording of examples/mcp_client_demo: connecting to the official MCP reference server over stdio, listing its tools, calling one directly, then a real AgentExecutor backed by local Ollama picking the MCP-backed get-sum tool itself and getting the right answer (136) back through the full round trip -- no API key involved](docs/demo.gif)
 
 ## Status: v0.19.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, pgvector, PDF/CSV/web loaders) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
 

@@ -40,27 +40,29 @@ tight loop (`throughput` mode).
 ## One recorded run
 
 **Environment:** macOS 26.5.1, Apple M3 Max (arm64). Apple clang 21.0.0, CMake 3.28.4,
-nlohmann-json 3.12.0, cpr 1.14.2, faiss 1.15.0, poppler 25.05.0 (Homebrew, x86_64 build — see caveat
-below). Python 3.11.6, langchain-core 1.5.3. Node v20.19.3, @langchain/core 1.2.5. `iterations=100000`,
-`startup_trials=9`, one discarded warmup run before the C++ startup trials.
+nlohmann-json 3.12.0, cpr 1.14.2, faiss 1.15.0, poppler 25.05.0, libpq (PostgreSQL 14.11) (Homebrew,
+x86_64 build — see caveat below). Python 3.11.6, langchain-core 1.5.3. Node v20.19.3,
+@langchain/core 1.2.5. `iterations=100000`, `startup_trials=9`, one discarded warmup run before the C++
+startup trials; numbers below are the average of two consecutive full runs.
 
 | | Cold start (median) | Throughput (ops/sec, mocked chain) |
 |---|---|---|
-| **C++** (this project) | 0.066 s | ~338,000 |
-| **TypeScript** (`@langchain/core`) | 0.147 s | ~64,000 |
-| **Python** (`langchain-core`) | 0.508 s | ~3,740 |
+| **C++** (this project) | 0.068 s | ~338,000 |
+| **TypeScript** (`@langchain/core`) | 0.150 s | ~61,000 |
+| **Python** (`langchain-core`) | 0.487 s | ~3,670 |
 
-Directionally: C++ cold-starts roughly **2.2x faster than TypeScript** and **7.7x faster than Python**,
-and pushes **~5.3x the throughput of TypeScript** and **~90x the throughput of Python** on a chain
-that does no real work beyond string templating and object construction. Throughput is essentially
-unchanged from the previous recorded run below; cold start is not, and that's worth explaining rather
-than glossing over.
+Directionally: C++ cold-starts roughly **2.2x faster than TypeScript** and **7.2x faster than Python**,
+and pushes **~5.5x the throughput of TypeScript** and **~92x the throughput of Python** on a chain
+that does no real work beyond string templating and object construction. Both cold start and
+throughput are essentially unchanged from the previous recorded run below (small run-to-run
+fluctuation, not a new trend) — see the next section for why that's notable given what changed
+underneath.
 
-### A real regression, and why it's not (yet) fixed
+### The regression from last time hasn't gotten worse — a data point worth having
 
-The previous recorded run here measured **0.023 s** for C++ cold start — roughly **3x faster** than
-what's measured now. That's a real, reproducible regression (confirmed stable across three separate
-runs while updating this file), not noise, and it has a concrete, verified cause:
+The previous recorded run here measured **0.066 s** for C++ cold start, blamed on `bench_cpp`
+transitively linking `libfaiss`/`libpoppler-cpp` it never calls (see below for the full explanation of
+why — still current). Since then, `PgVectorStore` added a third heavy dependency, `libpq`:
 
 ```
 $ otool -L build/benchmarks/cpp/bench_cpp
@@ -68,25 +70,32 @@ $ otool -L build/benchmarks/cpp/bench_cpp
 	/usr/lib/libcurl.4.dylib
 	/usr/local/opt/faiss/lib/libfaiss.dylib
 	/usr/local/opt/poppler/lib/libpoppler-cpp.2.dylib
+	/usr/local/opt/postgresql@14/lib/postgresql@14/libpq.5.dylib
 	/usr/lib/libc++.1.dylib
 	/usr/lib/libSystem.B.dylib
 ```
 
-`bench_cpp` now links `libfaiss.dylib` and `libpoppler-cpp.dylib` directly, even though its own code
-(`bench.cpp`) never touches `FaissVectorStore` or `PdfLoader` — both added since the last recorded run.
-Every process using this library now pays FAISS's/poppler-cpp's dynamic-linker resolution and page-in
-cost at startup, whether it uses either feature or not.
+Despite that, cold start (0.068 s) is statistically the same as before (0.066 s) — not the further
+~50% jump a naive per-dependency model would predict. Plausible reading: the first two dependencies
+(faiss, with its own transitive OpenBLAS/libomp/GCC-runtime chain, and poppler-cpp, with
+freetype/fontconfig/libjpeg/etc.) already dominate whatever fixed per-process dynamic-linker/dyld
+overhead this regression is made of; a third, comparatively lighter dylib (`libpq` has few transitive
+deps of its own) adds little on top. This is *not* a reason to deprioritize the actual fix (splitting
+`FaissVectorStore`/`PdfLoader`/`PgVectorStore` into their own library target — see below and
+CONTRIBUTING.md) — it just means the cost curve isn't purely linear per dependency, which is worth
+knowing before predicting how much a fourth or fifth would add.
 
-This isn't a `target_link_libraries(... PRIVATE ...)` oversight — it was tried, and doesn't help: for a
-**static** library (which `langchain_core` is), CMake propagates all link libraries to consumers
-regardless of the `PUBLIC`/`PRIVATE`/`INTERFACE` keyword, because the static archive's own object files
-(`faiss_vector_store.cpp.o`, `pdf_loader.cpp.o`) still reference `faiss::`/`poppler::` symbols, and
-nothing strips them from the archive just because a given consumer never calls them. `PRIVATE` still
-keeps FAISS's/poppler-cpp's *include directories* off unrelated consumers' compile lines (real, if
-minor, hygiene), but not their link libraries — see the comment in the top-level `CMakeLists.txt`.
-Actually fixing this means splitting `FaissVectorStore`/`PdfLoader` into their own library target that
-examples/tests opt into, rather than folding everything into one `langchain_core` archive — a real
-restructuring, tracked as a follow-up (see CONTRIBUTING.md) rather than done as a drive-by fix here.
+The original explanation still holds and is unchanged: `bench_cpp` links these libraries even though
+`bench.cpp` never calls `FaissVectorStore`/`PdfLoader`/`PgVectorStore`/`QdrantVectorStore`, because
+`target_link_libraries(... PRIVATE ...)` doesn't stop a **static** library from propagating its link
+libraries to consumers (CMake has to — the archive's own object files still reference `faiss::`/
+`poppler::`/`PostgreSQL::` symbols, and nothing strips them out just because a given consumer never
+calls them). `PRIVATE` still keeps their *include directories* off unrelated consumers' compile lines
+(real, if minor, hygiene), but not their link libraries — see the comment in the top-level
+`CMakeLists.txt`. Actually fixing this means splitting these features into their own library target
+that examples/tests opt into, rather than folding everything into one `langchain_core` archive — a
+real restructuring, tracked as a follow-up (see CONTRIBUTING.md) rather than done as a drive-by fix
+here.
 
 The Python gap is consistent with what LangChain's own maintainers have written about: `langchain-core`
 builds every message/prompt value through Pydantic model construction and validation, which costs
