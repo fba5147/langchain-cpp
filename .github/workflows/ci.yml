@@ -31,7 +31,12 @@ jobs:
       - name: Install Ninja and native build deps (macOS)
         if: runner.os == 'macOS'
         # See the Linux step above for why autoconf/autoconf-archive/automake/libtool are needed.
-        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
+        # libomp is needed because AppleClang doesn't support OpenMP out of
+        # the box, and faiss's vcpkg port requires it -- see
+        # triplets/arm64-osx.cmake and this project's own CMakeLists.txt for
+        # the two-sided fix that wires it in (vcpkg's port build, and this
+        # project's own find_package(faiss ...), respectively).
+        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool libomp
 
       - name: Cache vcpkg
         uses: actions/cache@v4

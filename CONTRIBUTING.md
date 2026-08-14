@@ -20,11 +20,14 @@ ctest --test-dir build --output-on-failure
 If you don't have vcpkg set up, the same dependencies are available via Homebrew
 (`brew install nlohmann-json cpr googletest faiss poppler pkg-config`) — configure with
 `cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=/usr/local` (or `/opt/homebrew` on Apple Silicon
-with the ARM Homebrew prefix) instead of the vcpkg preset. This is the path actually exercised while
-building this project (see the README's Ollama/local-testing notes) — the vcpkg path is declared and
-should work (`faiss`/`poppler` are both real vcpkg ports, and poppler's own port documents the same
-`pkg_check_modules(poppler-cpp)` this project's CMakeLists.txt uses), but hasn't been run end-to-end
-here, since that means building FAISS/poppler-cpp themselves from source via vcpkg.
+with the ARM Homebrew prefix) instead of the vcpkg preset. This is the path used for most local
+development (see the README's Ollama/local-testing notes), but the vcpkg path (`cmake --preset
+default`) has also been verified end-to-end on macOS (Configure + Build + full test suite passing) —
+see `triplets/arm64-osx.cmake`/`triplets/x64-osx.cmake` for two real, non-obvious fixes that were
+needed to get there: AppleClang doesn't support OpenMP out of the box (needed by faiss), and faiss's
+Metal GPU backend defaults on for Apple Silicon and needs a component (Apple's Metal Toolchain) that
+isn't installed on CI runners by default, so it's turned off (this project only uses `IndexFlatIP`,
+CPU-only).
 
 Run an example or two to sanity-check behavior beyond what the unit tests cover — see the list in the
 README's "Building" section. Most examples (`mock_chain`, `structured_output`, `tools_demo`,

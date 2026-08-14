@@ -12,6 +12,32 @@ option(LANGCHAIN_BUILD_BENCHMARKS "Build benchmark executables" ON)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 
+# vcpkg's faiss port links OpenMP::OpenMP_CXX into its exported CMake
+# config, so that target must exist in this project's own scope before
+# find_package(faiss ...) resolves it below -- otherwise: "the link
+# interface of target faiss contains OpenMP::OpenMP_CXX but the target
+# was not found." AppleClang doesn't support OpenMP out of the box, and
+# CMake's FindOpenMP can't auto-detect it even with libomp installed --
+# it needs the exact compiler flags and library path spelled out (see
+# triplets/arm64-osx.cmake for the vcpkg-side half of this same fix).
+if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" AND NOT OpenMP_CXX_FOUND)
+    find_program(LANGCHAIN_BREW_EXECUTABLE brew)
+    if(LANGCHAIN_BREW_EXECUTABLE)
+        execute_process(
+            COMMAND "${LANGCHAIN_BREW_EXECUTABLE}" --prefix libomp
+            OUTPUT_VARIABLE LANGCHAIN_LIBOMP_PREFIX
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+    endif()
+    if(LANGCHAIN_LIBOMP_PREFIX AND EXISTS "${LANGCHAIN_LIBOMP_PREFIX}/lib/libomp.dylib")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LANGCHAIN_LIBOMP_PREFIX}/include" CACHE STRING "")
+        set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "")
+        set(OpenMP_omp_LIBRARY "${LANGCHAIN_LIBOMP_PREFIX}/lib/libomp.dylib" CACHE STRING "")
+    endif()
+endif()
+find_package(OpenMP QUIET)
+
 # FAISS's CMake config target name isn't consistent: vcpkg's port exports
 # the namespaced faiss::faiss, Homebrew's bottle exports a bare `faiss`
 # (no cmake config at all on some Homebrew versions) -- try each in turn,
