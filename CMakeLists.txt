@@ -67,6 +67,11 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
+# CMake's own FindPostgreSQL module (via pg_config) locates libpq for
+# PgVectorStore; verified against a real local Postgres+pgvector
+# instance -- see CONTRIBUTING.md for the vcpkg-side caveat.
+find_package(PostgreSQL REQUIRED)
+
 add_library(langchain_core
     src/core/message.cpp
     src/core/dotenv.cpp
@@ -115,7 +120,13 @@ add_library(langchain_core
     src/rag/vectorstores/faiss_vector_store.cpp
     src/rag/vectorstores/qdrant_wire_format.cpp
     src/rag/vectorstores/qdrant_vector_store.cpp
+    src/rag/vectorstores/pgvector_sql.cpp
+    src/rag/vectorstores/pgvector_store.cpp
     src/rag/loaders/pdf_loader.cpp
+    src/rag/loaders/csv_parser.cpp
+    src/rag/loaders/csv_loader.cpp
+    src/rag/loaders/html_to_text.cpp
+    src/rag/loaders/web_loader.cpp
     src/rag/retrievers/retriever.cpp
     src/rag/format_documents.cpp
 )
@@ -141,7 +152,7 @@ target_include_directories(langchain_core PUBLIC
 # not a target_link_libraries keyword change; left as a follow-up.
 target_link_libraries(langchain_core
     PUBLIC nlohmann_json::nlohmann_json cpr::cpr
-    PRIVATE ${LANGCHAIN_FAISS_TARGET} PkgConfig::POPPLER_CPP
+    PRIVATE ${LANGCHAIN_FAISS_TARGET} PkgConfig::POPPLER_CPP PostgreSQL::PostgreSQL
 )
 
 if(LANGCHAIN_BUILD_EXAMPLES)

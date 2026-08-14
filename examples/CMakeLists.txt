@@ -50,3 +50,7 @@ target_link_libraries(mcp_server_demo PRIVATE langchain::core)
 add_executable(qdrant_demo qdrant_demo.cpp)
 target_link_libraries(qdrant_demo PRIVATE langchain::core)
 target_compile_definitions(qdrant_demo PRIVATE EXAMPLES_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+
+add_executable(pgvector_demo pgvector_demo.cpp)
+target_link_libraries(pgvector_demo PRIVATE langchain::core)
+target_compile_definitions(pgvector_demo PRIVATE EXAMPLES_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

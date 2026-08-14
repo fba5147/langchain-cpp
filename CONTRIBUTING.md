@@ -8,7 +8,7 @@ library.
 ## Building and testing
 
 Requires a C++20 compiler, CMake 3.21+, `pkg-config`, and [vcpkg](https://github.com/microsoft/vcpkg)
-(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`).
+(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`, `libpq`).
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
@@ -18,7 +18,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 If you don't have vcpkg set up, the same dependencies are available via Homebrew
-(`brew install nlohmann-json cpr googletest faiss poppler pkg-config`) — configure with
+(`brew install nlohmann-json cpr googletest faiss poppler libpq pkg-config`) — configure with
 `cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=/usr/local` (or `/opt/homebrew` on Apple Silicon
 with the ARM Homebrew prefix) instead of the vcpkg preset. This is the path used for most local
 development (see the README's Ollama/local-testing notes), but the vcpkg path (`cmake --preset
@@ -27,7 +27,9 @@ see `triplets/arm64-osx.cmake`/`triplets/x64-osx.cmake` for two real, non-obviou
 needed to get there: AppleClang doesn't support OpenMP out of the box (needed by faiss), and faiss's
 Metal GPU backend defaults on for Apple Silicon and needs a component (Apple's Metal Toolchain) that
 isn't installed on CI runners by default, so it's turned off (this project only uses `IndexFlatIP`,
-CPU-only).
+CPU-only). `PgVectorStore`'s `libpq` dependency (found via CMake's own `FindPostgreSQL` module, not
+pkg-config) has only been verified via the Homebrew path here, unlike faiss/poppler-cpp — if you hit a
+vcpkg-specific issue with it, that's a real gap, not a known-and-ignored one.
 
 Run an example or two to sanity-check behavior beyond what the unit tests cover — see the list in the
 README's "Building" section. Most examples (`mock_chain`, `structured_output`, `tools_demo`,
@@ -35,14 +37,17 @@ README's "Building" section. Most examples (`mock_chain`, `structured_output`, `
 `rate_limit_demo`, `multimodal_demo`) run fully offline against `MockChat`. `ollama_demo` and
 `basic_chat`/`more_providers_demo`/`mcp_client_demo` (with an API key, or `ollama serve` running
 locally) exercise real network calls. `qdrant_demo` needs a real Qdrant server (`docker run -p 6333:6333
-qdrant/qdrant`) but otherwise runs offline (`MockEmbeddings`). `mcp_server_demo` isn't meant to be run
-directly at all — it speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
+qdrant/qdrant`) and `pgvector_demo` needs a real Postgres+pgvector server (`docker run -p 5432:5432 -e
+POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16`, then `CREATE EXTENSION IF NOT EXISTS vector;`), but
+both otherwise run offline (`MockEmbeddings`). `mcp_server_demo` isn't meant to be run directly at all —
+it speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
 `tests/test_mcp_server_roundtrip.cpp`).
 
-`tests/test_qdrant_vector_store_live.cpp` follows the same pattern as the mock-server contract tests
-below, but against a *real* dependency instead of a mock: it `GTEST_SKIP()`s (not fails) when no Qdrant
-server is reachable at `QDRANT_URL` (default `http://localhost:6333`), so `ctest` stays green without
-Docker running, but exercises the real HTTP round trip end-to-end when it is.
+`tests/test_qdrant_vector_store_live.cpp`/`tests/test_pgvector_store_live.cpp` follow the same pattern
+as the mock-server contract tests below, but against a *real* dependency instead of a mock: they
+`GTEST_SKIP()` (not fail) when no server is reachable (`QDRANT_URL`/`PGVECTOR_TEST_CONNECTION_STRING`
+env vars, defaulting to the `docker run` commands above), so `ctest` stays green without Docker running,
+but exercise the real round trip end-to-end when it is.
 
 ## Before opening a PR
 
@@ -85,12 +90,12 @@ Roadmap item 6 (README) is a lettered list of gaps identified against official L
 (Python)/LangChain.js; parts 1 (`RunnableParallel`/`RunnablePassthrough`/`RunnableBranch`), 2
 (`ChatModel::stream()`), 3 (callbacks), 4 (`CachingChatModel`), 5 (`ChatModelWithHistory`), 6 (few-shot
 prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), 8 (`Message::images`), and 9
-(`mcp::McpClient` + `mcp::McpServer`) are done. Part 10 (integration breadth) is partly done
-(`FaissVectorStore`, `QdrantVectorStore`, `PdfLoader`); concrete things worth doing, roughly in priority
-order:
+(`mcp::McpClient` + `mcp::McpServer`) are done. Part 10 (integration breadth) is essentially done too
+(`FaissVectorStore`, `QdrantVectorStore`, `PgVectorStore`, `PdfLoader`, `CsvLoader`, `WebLoader`);
+concrete things worth doing, roughly in priority order:
 
-- **More integration breadth** (part 10) — `FaissVectorStore`, `QdrantVectorStore`, and `PdfLoader`
-  shipped; still open: pgvector vector store, CSV/web-HTML document loaders, more embeddings providers.
+- **More embeddings providers** (part 10) — the last open item in integration breadth; the official
+  libs' partner-package model (Cohere, HuggingFace, etc.), at a much smaller scale here.
 - **Split `langchain_core` into multiple library targets** — adding FAISS/poppler-cpp as dependencies of
   the single monolithic `langchain_core` static library means every consumer (every example, the
   benchmark binary) now links `libfaiss`/`libpoppler-cpp` and pays their dynamic-linker load cost at

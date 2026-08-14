@@ -6,6 +6,7 @@
     "cpr",
     "gtest",
     "faiss",
-    "poppler"
+    "poppler",
+    "libpq"
   ]
 }

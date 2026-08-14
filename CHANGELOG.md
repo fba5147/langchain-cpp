@@ -4,6 +4,42 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet follow strict
 semantic versioning (pre-1.0, breaking changes can land in a minor bump).
 
+## [0.19.0] — pgvector, CSV/web loaders
+
+Completes Part 10 of the roadmap-item-6 gap list (integration breadth), aside from more embeddings
+providers.
+
+- `rag::PgVectorStore` — a `VectorStore` backed by a real Postgres database with the pgvector extension,
+  over libpq (found via CMake's own `FindPostgreSQL` module). Same real-persistence contract as
+  `QdrantVectorStore`: indexed with one instance, destroyed it, searched successfully from a second
+  instance pointed at the same table name, against an actual local `pgvector/pgvector:pg16` container.
+  Requires the `vector` extension to already exist in the target database — this store doesn't create it
+  itself, since that typically needs superuser privileges its own connection may not have. Uses pgvector's
+  cosine distance operator (`<=>`); no ivfflat/hnsw index (exact search only, same tradeoff as
+  `InMemoryVectorStore`). Point IDs are handled by Postgres itself (`gen_random_uuid()`), unlike
+  `QdrantVectorStore`, which had to generate its own UUIDs client-side.
+  `src/rag/vectorstores/pgvector_sql.hpp/.cpp` keeps the SQL string construction pure and separately
+  tested, same reasoning as the wire-format modules elsewhere.
+- `rag::CsvLoader` — one `Document` per data row (first row is the header); other columns become
+  metadata, and content is either every column joined as `"column: value"` lines, or a single named
+  column (`Config::content_column`) on its own. Backed by a hand-written RFC-4180-ish CSV parser
+  (`src/rag/loaders/csv_parser.hpp/.cpp`, kept pure and separately tested) that correctly handles quoted
+  fields with embedded delimiters, embedded newlines, and escaped (`""`) quotes.
+- `rag::WebLoader` — fetches a URL (via `cpr`, already a dependency) and strips HTML tags down to plain
+  text; `<script>`/`<style>` element contents are dropped entirely, not just their tags. A minimal
+  tag-stripping conversion (`src/rag/loaders/html_to_text.hpp/.cpp`, pure and separately tested), not a
+  real HTML parser — good enough for a typical article/doc page. Caught and fixed a real bug while
+  testing: opening block tags (`<p>`) were inserting a stray space right after the previous element's
+  closing-tag newline (e.g. `<p>First</p><p>Second</p>` came out as `"First\n Second"` instead of
+  `"First\nSecond"`) — fixed by having opening block tags contribute nothing, since whatever preceded them
+  already provided the necessary break.
+- `examples/pgvector_demo.cpp` mirrors `examples/qdrant_demo.cpp`: run it twice, the second run detects
+  the table already has data (via a probe search) and skips re-indexing.
+- `tests/test_pgvector_store_live.cpp` follows `test_qdrant_vector_store_live.cpp`'s pattern:
+  `GTEST_SKIP()`s when no Postgres server is reachable, so `ctest` stays green without Docker running.
+- 34 new tests (7 pgvector SQL, 5 pgvector live, 8 CSV parser, 5 CsvLoader, 7 html_to_text, 2 WebLoader —
+  covering pure logic and, for both new vector stores, real round trips against actual servers).
+
 ## [0.18.0] — Qdrant vector store
 
 Part 10 of the roadmap-item-6 gap list (further integration breadth, alongside `FaissVectorStore`/

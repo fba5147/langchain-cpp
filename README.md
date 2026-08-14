@@ -12,7 +12,7 @@ goal is an idiomatic C++ library, not a transliteration.
 
 ![A terminal recording of examples/ollama_demo running against a real local Ollama server: plain chat, streaming, a tool-calling agent answering "123 * 456 is 56088.", a streamed tool call, and embeddings -- no API key involved](docs/demo.gif)
 
-## Status: v0.18.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, PDF) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
+## Status: v0.19.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, pgvector, PDF/CSV/web loaders) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
 
 What exists today:
 
@@ -135,9 +135,14 @@ What exists today:
   subprocess, an automated round-trip test with no network dependency
   (`tests/test_mcp_server_roundtrip.cpp`).
 - **RAG stack** (`langchain::rag`):
-  - `DocumentLoader` / `TextLoader` / `MarkdownLoader` / `PdfLoader` — load a file into one or more
-    `Document`s; `PdfLoader` (via poppler-cpp) yields one `Document` per page, tagged with
-    `metadata["page"]`, mirroring LangChain's `PyPDFLoader`.
+  - `DocumentLoader` / `TextLoader` / `MarkdownLoader` / `PdfLoader` / `CsvLoader` / `WebLoader` — load a
+    file (or a URL, for `WebLoader`) into one or more `Document`s. `PdfLoader` (via poppler-cpp) yields
+    one `Document` per page, tagged with `metadata["page"]`, mirroring LangChain's `PyPDFLoader`.
+    `CsvLoader` yields one `Document` per row (the first row is the header): every other column becomes
+    metadata, and content is either all columns joined as `"column: value"` lines, or a single named
+    column (`Config::content_column`) on its own. `WebLoader` fetches a URL and strips HTML tags down to
+    plain text (script/style contents dropped entirely, not just their tags) — a minimal tag-stripping
+    conversion, not a real HTML parser.
   - `RecursiveCharacterTextSplitter` — splits text into `chunk_size`-bounded pieces, trying paragraph
     breaks, then lines, then words, then raw characters, and carrying `chunk_overlap` characters of
     trailing context into the next chunk.
@@ -146,11 +151,12 @@ What exists today:
     API).
   - `VectorStore` / `InMemoryVectorStore` (brute-force cosine similarity) / `FaissVectorStore` (FAISS's
     `IndexFlatIP` over L2-normalized vectors — exact nearest-neighbor search via a real vector-search
-    library instead of the store's own loop) / `QdrantVectorStore` (a real remote vector database over
-    its REST API — data survives this process exiting, and can be shared across processes/machines,
-    unlike the other two; the collection is created lazily on first `add_documents()`, or reused as-is
-    if one with the same name already exists) — `store->as_retriever(k)` wraps any of the three as a
-    `Retriever`.
+    library instead of the store's own loop) / `QdrantVectorStore` / `PgVectorStore` (two real remote
+    vector stores — data survives this process exiting, and can be shared across processes/machines,
+    unlike the in-process ones above; `QdrantVectorStore` talks to a dedicated Qdrant server over its
+    REST API, `PgVectorStore` talks to a Postgres database with the pgvector extension over libpq; both
+    create their collection/table lazily on first `add_documents()`, or reuse an existing one with the
+    same name) — `store->as_retriever(k)` wraps any of the four as a `Retriever`.
   - `Retriever` — a `Runnable<string, vector<Document>>`, so it composes into a chain like any other
     Runnable.
   - `FormatDocumentsAsString` — joins retrieved `Document`s into one string (`Runnable<vector<Document>,
@@ -332,11 +338,20 @@ std::string answer = rag_chain->invoke("What is RAII?");
 That composes because `RunnableParallel<Input, std::string>`'s output type — `unordered_map<string,
 string>` — is exactly `PromptValues`, so it flows straight into a `ChatPromptTemplate` with `{context}`
 and `{question}` placeholders, no adapter needed. `InMemoryVectorStore` here is interchangeable with
-`FaissVectorStore` or `QdrantVectorStore` — same interface, so nothing else in the chain changes:
+`FaissVectorStore`, `QdrantVectorStore`, or `PgVectorStore` — same interface, so nothing else in the
+chain changes:
 
 ```cpp
 auto store = std::make_shared<rag::QdrantVectorStore>(std::make_shared<rag::OpenAIEmbeddings>(),
                                                         rag::QdrantConfig{.collection_name = "my_docs"});
+// or: rag::PgVectorStore(embeddings, rag::PgVectorConfig{.table_name = "my_docs"});
+```
+
+`CsvLoader` and `WebLoader` plug into the same pipeline as any other loader:
+
+```cpp
+auto rows = rag::CsvLoader("faq.csv", {.content_column = "answer"}).load();  // one Document per row
+auto page = rag::WebLoader("https://example.com/docs").load();              // HTML stripped to text
 ```
 
 See `examples/mock_chain.cpp` and `examples/structured_output.cpp` for fully offline versions of the
@@ -344,16 +359,17 @@ first two snippets above (no API key needed), `examples/basic_chat.cpp` for a re
 `examples/tools_demo.cpp` for defining a `Tool` and rendering its function-calling schema,
 `examples/agent_demo.cpp` for the full agent loop (scripted offline, or live with an API key set),
 `examples/rag_demo.cpp` for the full RAG pipeline (offline with `MockEmbeddings`, or live with
-`OPENAI_API_KEY` set), `examples/qdrant_demo.cpp` for the same pipeline against a real Qdrant server
-(verified persisting across separate runs of the binary), and `examples/ollama_demo.cpp` for
-`OpenAIChat`/`OpenAIEmbeddings` pointed at a local [Ollama](https://ollama.com) server instead of
-`api.openai.com` (chat, tool-calling agent loop, and embeddings, all verified end-to-end against a real
-`llama3.2` + `nomic-embed-text` server — see note below on local-model tool-calling reliability).
+`OPENAI_API_KEY` set), `examples/qdrant_demo.cpp`/`examples/pgvector_demo.cpp` for the same pipeline
+against real Qdrant/Postgres servers (both verified persisting across separate runs of the binary), and
+`examples/ollama_demo.cpp` for `OpenAIChat`/`OpenAIEmbeddings` pointed at a local
+[Ollama](https://ollama.com) server instead of `api.openai.com` (chat, tool-calling agent loop, and
+embeddings, all verified end-to-end against a real `llama3.2` + `nomic-embed-text` server — see note
+below on local-model tool-calling reliability).
 
 ## Building
 
 Requires a C++20 compiler, CMake 3.21+, `pkg-config`, and [vcpkg](https://github.com/microsoft/vcpkg)
-(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`; see
+(dependencies: `nlohmann-json`, `cpr`, `gtest`, `faiss`, `poppler`, `libpq`; see
 [CONTRIBUTING.md](CONTRIBUTING.md) for the Homebrew alternative this project's own development
 actually runs on).
 
@@ -385,6 +401,8 @@ Run the examples:
 # human-typed REPL) -- it's spawned by an MCP client, see tests/test_mcp_server_roundtrip.cpp
 ./build/examples/qdrant_demo   # requires `docker run -p 6333:6333 qdrant/qdrant`; run it twice --
                                 # the second run detects the existing data and skips re-indexing
+./build/examples/pgvector_demo   # requires a Postgres+pgvector server (see below); run it twice --
+                                  # the second run detects the existing data and skips re-indexing
 OPENAI_API_KEY=sk-... ./build/examples/basic_chat
 ANTHROPIC_API_KEY=sk-ant-... ./build/examples/basic_chat
 GOOGLE_API_KEY=... ./build/examples/basic_chat
@@ -445,6 +463,17 @@ real `AgentExecutor` loop backed by local Ollama (`llama3.2`): asked "What is 47
 get-sum tool," the model correctly chose the MCP-backed tool, langchain-cpp called out to the MCP
 server over its stdio transport, and the result (136) came back correctly — the full path, not just
 its parts in isolation. See `examples/mcp_client_demo.cpp`.
+
+`QdrantVectorStore` and `PgVectorStore` were both verified against real local instances (`docker run -p
+6333:6333 qdrant/qdrant` and `docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres
+pgvector/pgvector:pg16`, respectively) — not just against each's documented API. For both: indexed
+documents with one store instance, destroyed it, and searched successfully from a *second* instance
+pointed at the same collection/table name, confirming data actually survives a process restart (the
+whole point of using either over `InMemoryVectorStore`/`FaissVectorStore`) — see
+`examples/qdrant_demo.cpp`/`examples/pgvector_demo.cpp`, which do exactly this across two separate runs
+of the binary. `tests/test_qdrant_vector_store_live.cpp`/`tests/test_pgvector_store_live.cpp` run the
+same kind of checks automatically, `GTEST_SKIP()`-ing rather than failing when no server is reachable,
+so `ctest` stays green without Docker running while still exercising the real thing when it is.
 
 ## Roadmap
 
@@ -510,13 +539,15 @@ libraries) is broken into lettered parts since it's too broad to land as one uni
       transports (HTTP/SSE) are still open. Local inference via a direct llama.cpp/GGUF binding (no
       server in between) is related but separate — Ollama already works today through `OpenAIChat` +
       `base_url`, see `examples/ollama_demo.cpp`.
-   10. **Integration breadth** (partly done, v0.15.0/v0.18.0): ~~a real vector store beyond
-       `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`, in-process) and
-       `QdrantVectorStore` (a real remote vector database over its REST API — verified live against a
-       real Qdrant server, `docker run -p 6333:6333 qdrant/qdrant`, including that data survives a
-       process restart, see `examples/qdrant_demo.cpp`); ~~a PDF document loader~~ — `PdfLoader` (via
-       poppler-cpp, one `Document` per page). Still open: pgvector, CSV/web-HTML document loaders, and
-       more embeddings providers — the official libs' partner-package model, at a much smaller scale.
+   10. ~~**Integration breadth**~~ (v0.15.0/v0.18.0/v0.19.0): ~~a real vector store beyond
+       `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`, in-process), `QdrantVectorStore`,
+       and `PgVectorStore` (two real remote vector stores, over Qdrant's REST API and Postgres/pgvector's
+       wire protocol respectively — both verified live against real local servers, including that data
+       survives a process restart, see `examples/qdrant_demo.cpp`/`examples/pgvector_demo.cpp`); ~~a PDF
+       document loader~~ — `PdfLoader` (via poppler-cpp, one `Document` per page); ~~CSV/web-HTML
+       document loaders~~ — `CsvLoader` (one `Document` per row) and `WebLoader` (fetches a URL, strips
+       HTML tags down to plain text). Still open: more embeddings providers — the official libs'
+       partner-package model, at a much smaller scale.
 7. ~~Contract-level HTTP verification for `AnthropicChat`/`GeminiChat`~~ (v0.16.0, partial) — both
    verified end-to-end over real HTTP against a local mock implementing their documented contracts (see
    above); live smoke tests against their *actual* endpoints still need real credentials and remain

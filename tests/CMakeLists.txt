@@ -35,6 +35,10 @@ add_executable(langchain_tests
     test_gemini_chat_live_contract.cpp
     test_qdrant_wire_format.cpp
     test_qdrant_vector_store_live.cpp
+    test_pgvector_sql.cpp
+    test_pgvector_store_live.cpp
+    test_csv_loader.cpp
+    test_web_loader.cpp
 )
 # test_mcp_server_roundtrip.cpp needs the built mcp_server_demo binary --
 # only meaningful (and only buildable, since it needs the real path) when
@@ -44,7 +48,12 @@ if(TARGET mcp_server_demo)
     target_compile_definitions(langchain_tests PRIVATE MCP_SERVER_DEMO_PATH="$<TARGET_FILE:mcp_server_demo>")
 endif()
 
-target_link_libraries(langchain_tests PRIVATE langchain::core GTest::gtest GTest::gtest_main)
+# PostgreSQL::PostgreSQL is linked PRIVATE by langchain_core, so its
+# include directories (needed by test_pgvector_store_live.cpp's direct
+# `#include <libpq-fe.h>`) don't propagate here automatically -- link it
+# directly too (same PRIVATE-doesn't-propagate-includes reasoning as the
+# top-level CMakeLists.txt comment on faiss/poppler-cpp).
+target_link_libraries(langchain_tests PRIVATE langchain::core PostgreSQL::PostgreSQL GTest::gtest GTest::gtest_main)
 
 # Lets tests reach internal (non-public-API) provider wire-format headers
 # under src/, e.g. "providers/google/gemini_wire_format.hpp" -- these
