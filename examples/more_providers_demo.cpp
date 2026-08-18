@@ -1,9 +1,10 @@
-// Demonstrates the newer providers: GeminiChat, AzureOpenAIChat, and the
-// OpenAI-compatible presets (GroqChat/MistralChat/DeepSeekChat). Each
-// section only actually calls out if its credentials are configured
-// (via real env vars or a .env file, see .env.example); otherwise it
-// prints what it would have done and moves on, so this always runs to
-// completion with no configuration at all.
+// Demonstrates the newer providers: GeminiChat, AzureOpenAIChat, the
+// OpenAI-compatible presets (GroqChat/MistralChat/DeepSeekChat), and the
+// Azure OpenAI / Gemini embeddings providers. Each section only actually
+// calls out if its credentials are configured (via real env vars or a
+// .env file, see .env.example); otherwise it prints what it would have
+// done and moves on, so this always runs to completion with no
+// configuration at all.
 
 #include "langchain/langchain.hpp"
 
@@ -61,6 +62,31 @@ void try_groq() {
     std::cout << "[" << model->model_name() << "] " << reply.content << "\n\n";
 }
 
+void try_azure_openai_embeddings() {
+    std::cout << "--- Azure OpenAI Embeddings ---\n";
+    const char* deployment = std::getenv("AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT");
+    if (std::getenv("AZURE_OPENAI_API_KEY") == nullptr || std::getenv("AZURE_OPENAI_ENDPOINT") == nullptr ||
+        deployment == nullptr) {
+        std::cout << "AZURE_OPENAI_API_KEY / AZURE_OPENAI_ENDPOINT / AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT not all "
+                     "set; skipping.\n\n";
+        return;
+    }
+    rag::AzureOpenAIEmbeddings embeddings(rag::AzureOpenAIEmbeddingsConfig{.deployment = deployment});
+    std::vector<float> vector = embeddings.embed_query("Say hello in exactly 3 words.");
+    std::cout << "[" << deployment << "] embedding has " << vector.size() << " dimensions\n\n";
+}
+
+void try_gemini_embeddings() {
+    std::cout << "--- Gemini Embeddings ---\n";
+    if (std::getenv("GOOGLE_API_KEY") == nullptr) {
+        std::cout << "GOOGLE_API_KEY not set; skipping.\n\n";
+        return;
+    }
+    rag::GeminiEmbeddings embeddings;
+    std::vector<float> vector = embeddings.embed_query("Say hello in exactly 3 words.");
+    std::cout << "embedding has " << vector.size() << " dimensions\n\n";
+}
+
 } // namespace
 
 int main() {
@@ -69,6 +95,8 @@ int main() {
     run_section(try_gemini);
     run_section(try_azure_openai);
     run_section(try_groq);
+    run_section(try_azure_openai_embeddings);
+    run_section(try_gemini_embeddings);
 
     return 0;
 }

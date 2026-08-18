@@ -123,8 +123,11 @@ void write_all(int fd, const std::string& data) {
 void write_response(int fd, const MockHttpResponse& response) {
     std::string message = "HTTP/1.1 " + std::to_string(response.status) + " " + reason_phrase(response.status) +
                            "\r\n" + "Content-Type: " + response.content_type + "\r\n" +
-                           "Content-Length: " + std::to_string(response.body.size()) + "\r\n" + "Connection: close\r\n" +
-                           "\r\n" + response.body;
+                           "Content-Length: " + std::to_string(response.body.size()) + "\r\n" + "Connection: close\r\n";
+    for (const auto& [name, value] : response.extra_headers) {
+        message += name + ": " + value + "\r\n";
+    }
+    message += "\r\n" + response.body;
     write_all(fd, message);
 }
 

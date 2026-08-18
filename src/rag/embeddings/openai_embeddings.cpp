@@ -1,9 +1,10 @@
 #include "langchain/rag/embeddings/openai_embeddings.hpp"
 
+#include "openai_embeddings_wire_format.hpp"
+
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 
-#include <algorithm>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -30,7 +31,7 @@ OpenAIEmbeddings::OpenAIEmbeddings(OpenAIEmbeddingsConfig config) : config_(std:
 }
 
 std::vector<std::vector<float>> OpenAIEmbeddings::embed_documents(const std::vector<std::string>& texts) {
-    json body{{"model", config_.model}, {"input", texts}};
+    json body = detail::build_openai_embeddings_body(config_.model, texts);
 
     cpr::Response response = cpr::Post(cpr::Url{config_.base_url + "/embeddings"},
                                         cpr::Header{{"Authorization", "Bearer " + config_.api_key},
@@ -42,17 +43,7 @@ std::vector<std::vector<float>> OpenAIEmbeddings::embed_documents(const std::vec
                                   "): " + response.text);
     }
 
-    json parsed = json::parse(response.text);
-    std::vector<json> data(parsed["data"].begin(), parsed["data"].end());
-    std::sort(data.begin(), data.end(),
-              [](const json& a, const json& b) { return a["index"].get<int>() < b["index"].get<int>(); });
-
-    std::vector<std::vector<float>> result;
-    result.reserve(data.size());
-    for (const auto& entry : data) {
-        result.push_back(entry["embedding"].get<std::vector<float>>());
-    }
-    return result;
+    return detail::parse_openai_embeddings_response(json::parse(response.text));
 }
 
 std::vector<float> OpenAIEmbeddings::embed_query(const std::string& text) { return embed_documents({text}).front(); }

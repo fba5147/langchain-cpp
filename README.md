@@ -12,7 +12,7 @@ goal is an idiomatic C++ library, not a transliteration.
 
 ![A terminal recording of examples/mcp_client_demo: connecting to the official MCP reference server over stdio, listing its tools, calling one directly, then a real AgentExecutor backed by local Ollama picking the MCP-backed get-sum tool itself and getting the right answer (136) back through the full round trip -- no API key involved](docs/demo.gif)
 
-## Status: v0.19.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, pgvector, PDF/CSV/web loaders) + an MCP client and server + callbacks + caching + chat history + few-shot prompting + rate limiting
+## Status: v0.21.0 — core + six providers (streaming, multi-modal) + tools/structured output + agents + RAG (+ FAISS, Qdrant, pgvector, PDF/CSV/web loaders, Azure OpenAI/Gemini embeddings) + an MCP client and server over stdio and Streamable HTTP + callbacks + caching + chat history + few-shot prompting + rate limiting
 
 What exists today:
 
@@ -121,19 +121,24 @@ What exists today:
   `OpenAIChat`/`AzureOpenAIChat` encode images as content-parts JSON — the only providers here that
   currently support them; `AnthropicChat`/`GeminiChat` throw a clear error rather than silently
   dropping an attached image. See `examples/multimodal_demo.cpp`.
-- **MCP client and server** (`langchain::mcp`) — `McpClient` spawns an MCP server as a subprocess and
-  talks JSON-RPC 2.0 to it over stdio (the transport most local MCP servers use); `initialize()`
-  performs the handshake, `list_tools()`/`call_tool()` cover the tools capability
+- **MCP client and server** (`langchain::mcp`) — `McpClient` talks JSON-RPC 2.0 to an MCP server over
+  either of two transports: stdio (spawns the server as a subprocess — the common case for local
+  servers) or Streamable HTTP (`McpHttpConfig{url}` — connects to a remote server instead; the transport
+  that replaced the older separate HTTP+SSE transport in MCP's 2025-03-26 spec revision, supporting
+  both a single-JSON-object response and an SSE-streamed one, plus `Mcp-Session-Id` session tracking).
+  `initialize()` performs the handshake, `list_tools()`/`call_tool()` cover the tools capability
   (resources/prompts/sampling aren't implemented — out of scope for what `AgentExecutor` needs).
   `mcp::as_tools(client)` wraps every tool a server exposes as a `langchain::tools::Tool`, so they drop
   straight into a `ToolRegistry` and get called by `AgentExecutor` like any other tool — mirrors
-  LangChain.js's `@langchain/mcp-adapters`. `McpServer` is the other direction: wraps a `ToolRegistry`
-  and serves it over stdio, so *this* project's tools become callable by any MCP client. Verified live
-  end-to-end against the official reference server (`npx @modelcontextprotocol/server-everything`) *and*
-  through a real agent loop backed by local Ollama (`examples/mcp_client_demo.cpp`) — and, for the
-  server side, against langchain-cpp's own `McpClient` spawning `examples/mcp_server_demo.cpp` as a
-  subprocess, an automated round-trip test with no network dependency
-  (`tests/test_mcp_server_roundtrip.cpp`).
+  LangChain.js's `@langchain/mcp-adapters`. `McpServer`/`McpHttpServer` are the other direction: wrap a
+  `ToolRegistry` and serve it over stdio or Streamable HTTP respectively, so *this* project's tools
+  become callable by any MCP client. Verified live end-to-end against the official reference server
+  (`npx @modelcontextprotocol/server-everything`, both its stdio and `streamableHttp` modes) *and*
+  through a real agent loop backed by local Ollama (`examples/mcp_client_demo.cpp`,
+  `examples/mcp_http_client_demo.cpp`) — and, for the server side, against langchain-cpp's own
+  `McpClient` (spawning `examples/mcp_server_demo.cpp` as a subprocess for stdio, and connecting over a
+  real socket to an in-process `McpHttpServer` for HTTP), automated round-trip tests with no external
+  network dependency (`tests/test_mcp_server_roundtrip.cpp`, `tests/test_mcp_http_server_roundtrip.cpp`).
 - **RAG stack** (`langchain::rag`):
   - `DocumentLoader` / `TextLoader` / `MarkdownLoader` / `PdfLoader` / `CsvLoader` / `WebLoader` — load a
     file (or a URL, for `WebLoader`) into one or more `Document`s. `PdfLoader` (via poppler-cpp) yields
@@ -147,8 +152,12 @@ What exists today:
     breaks, then lines, then words, then raw characters, and carrying `chunk_overlap` characters of
     trailing context into the next chunk.
   - `Embeddings` — base interface (`embed_query` / `embed_documents`), with `MockEmbeddings`
-    (deterministic hash-based bag-of-words, no network) and `OpenAIEmbeddings` (OpenAI's embeddings
-    API).
+    (deterministic hash-based bag-of-words, no network), `OpenAIEmbeddings` (OpenAI's embeddings API),
+    `AzureOpenAIEmbeddings` (shares its wire format with `OpenAIEmbeddings`; only the deployment-based
+    URL and `api-key` header differ, same relationship as `AzureOpenAIChat`), and `GeminiEmbeddings`
+    (Google's `embedContent`/`batchEmbedContents`; embeds queries with `taskType: RETRIEVAL_QUERY` and
+    documents with `RETRIEVAL_DOCUMENT` — a real instance of the query/document distinction the
+    `Embeddings` interface is designed around).
   - `VectorStore` / `InMemoryVectorStore` (brute-force cosine similarity) / `FaissVectorStore` (FAISS's
     `IndexFlatIP` over L2-normalized vectors — exact nearest-neighbor search via a real vector-search
     library instead of the store's own loop) / `QdrantVectorStore` / `PgVectorStore` (two real remote
@@ -399,6 +408,8 @@ Run the examples:
 ./build/examples/mcp_client_demo   # requires `npx` (Node.js) and `ollama serve` running locally
 # examples/mcp_server_demo isn't meant to be run directly (it speaks stdio JSON-RPC, not a
 # human-typed REPL) -- it's spawned by an MCP client, see tests/test_mcp_server_roundtrip.cpp
+./build/examples/mcp_http_client_demo   # requires `npx -y @modelcontextprotocol/server-everything
+                                         # streamableHttp` running in another terminal first
 ./build/examples/qdrant_demo   # requires `docker run -p 6333:6333 qdrant/qdrant`; run it twice --
                                 # the second run detects the existing data and skips re-indexing
 ./build/examples/pgvector_demo   # requires a Postgres+pgvector server (see below); run it twice --
@@ -464,6 +475,16 @@ get-sum tool," the model correctly chose the MCP-backed tool, langchain-cpp call
 server over its stdio transport, and the result (136) came back correctly — the full path, not just
 its parts in isolation. See `examples/mcp_client_demo.cpp`.
 
+`McpClient`'s Streamable HTTP transport was separately verified against the same reference server
+running in its `streamableHttp` mode (`npx @modelcontextprotocol/server-everything streamableHttp`,
+listening on a real TCP port instead of being spawned as a subprocess) — the exact request/response
+shapes this transport implements (the `Accept: application/json, text/event-stream` header, the SSE
+framing real servers actually send back even for a plain `initialize` call, and the `Mcp-Session-Id`
+header round trip) came from probing that live server directly with `curl` while writing this, not just
+from the spec text. See `examples/mcp_http_client_demo.cpp`. `McpHttpServer` (the server-side half) was
+verified the other direction: langchain-cpp's own `McpClient` connecting to it over a real loopback
+socket, in `tests/test_mcp_http_server_roundtrip.cpp`.
+
 `QdrantVectorStore` and `PgVectorStore` were both verified against real local instances (`docker run -p
 6333:6333 qdrant/qdrant` and `docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres
 pgvector/pgvector:pg16`, respectively) — not just against each's documented API. For both: indexed
@@ -527,18 +548,28 @@ libraries) is broken into lettered parts since it's too broad to land as one uni
       `OpenAIChat`/`AzureOpenAIChat` encode them; `AnthropicChat`/`GeminiChat` throw a clear error
       instead of silently dropping them, since neither's wire-format support is implemented yet. Audio
       content blocks are still out of scope — no provider here has an audio API to target yet.
-   9. ~~**MCP client and server support**~~ (v0.14.0 client, v0.17.0 server) — confirmed as an official
-      package (`@langchain/mcp-adapters` in LangChain.js) during the comparison, so this was a real gap,
-      not speculative scope. `mcp::McpClient` talks JSON-RPC 2.0 to an MCP server spawned as a subprocess
-      over stdio (the transport most local MCP servers use); `mcp::as_tools()` wraps its tools as
-      `langchain::tools::Tool` so they compose into `AgentExecutor` like any other tool. `mcp::McpServer`
-      is the other direction: serves a `ToolRegistry` over stdio for other MCP clients to call. Verified
-      live against the official reference server and through a real Ollama-backed agent loop
-      (`examples/mcp_client_demo.cpp`), and the client/server pair verified interoperating with each
-      other in an automated, offline round-trip test (`tests/test_mcp_server_roundtrip.cpp`). Non-stdio
-      transports (HTTP/SSE) are still open. Local inference via a direct llama.cpp/GGUF binding (no
-      server in between) is related but separate — Ollama already works today through `OpenAIChat` +
-      `base_url`, see `examples/ollama_demo.cpp`.
+   9. ~~**MCP client and server support**~~ (v0.14.0 client, v0.17.0 server, v0.21.0 HTTP transport) —
+      confirmed as an official package (`@langchain/mcp-adapters` in LangChain.js) during the
+      comparison, so this was a real gap, not speculative scope. `mcp::McpClient` talks JSON-RPC 2.0 to
+      an MCP server over stdio (spawned as a subprocess — the transport most local MCP servers use) or
+      Streamable HTTP (`McpHttpConfig{url}` — connects to a remote server instead, the transport that
+      replaced the older separate HTTP+SSE transport in MCP's 2025-03-26 spec revision); `mcp::as_tools()`
+      wraps its tools as `langchain::tools::Tool` so they compose into `AgentExecutor` like any other
+      tool. `mcp::McpServer`/`mcp::McpHttpServer` are the other direction: serve a `ToolRegistry` over
+      stdio or Streamable HTTP respectively for other MCP clients to call. All four combinations verified
+      live against the official reference server (`npx @modelcontextprotocol/server-everything`, both
+      its stdio and `streamableHttp` modes) and through a real Ollama-backed agent loop
+      (`examples/mcp_client_demo.cpp`, `examples/mcp_http_client_demo.cpp`), plus the client/server pair
+      verified interoperating with each other in automated, offline round-trip tests
+      (`tests/test_mcp_server_roundtrip.cpp` for stdio, `tests/test_mcp_http_server_roundtrip.cpp` for
+      HTTP, the latter over a real loopback socket rather than a subprocess). The HTTP transport doesn't
+      implement session-ID issuance on the server side or SSE resumability/redelivery on either side —
+      both are spec-optional (`MAY`), and out of scope for what this project's own client/server pair or
+      the reference server it was verified against actually need; a server wanting to push unsolicited
+      messages to a client (this project's `McpHttpServer` never does) would need the former, and a
+      client recovering mid-stream after a dropped connection would need the latter. Local inference via
+      a direct llama.cpp/GGUF binding (no server in between) is related but separate — Ollama already
+      works today through `OpenAIChat` + `base_url`, see `examples/ollama_demo.cpp`.
    10. ~~**Integration breadth**~~ (v0.15.0/v0.18.0/v0.19.0): ~~a real vector store beyond
        `InMemoryVectorStore`~~ — `FaissVectorStore` (FAISS's `IndexFlatIP`, in-process), `QdrantVectorStore`,
        and `PgVectorStore` (two real remote vector stores, over Qdrant's REST API and Postgres/pgvector's
@@ -546,8 +577,12 @@ libraries) is broken into lettered parts since it's too broad to land as one uni
        survives a process restart, see `examples/qdrant_demo.cpp`/`examples/pgvector_demo.cpp`); ~~a PDF
        document loader~~ — `PdfLoader` (via poppler-cpp, one `Document` per page); ~~CSV/web-HTML
        document loaders~~ — `CsvLoader` (one `Document` per row) and `WebLoader` (fetches a URL, strips
-       HTML tags down to plain text). Still open: more embeddings providers — the official libs'
-       partner-package model, at a much smaller scale.
+       HTML tags down to plain text); ~~more embeddings providers~~ (this release) —
+       `AzureOpenAIEmbeddings` (shares `OpenAIEmbeddings`'s wire format) and `GeminiEmbeddings`
+       (Google's `embedContent`/`batchEmbedContents`, with real `taskType` query/document
+       differentiation) — both verified against a local mock HTTP server, same approach as
+       `AnthropicChat`/`GeminiChat` in Part 7 below, since neither has live credentials in this
+       environment. This closes out Part 10.
 7. ~~Contract-level HTTP verification for `AnthropicChat`/`GeminiChat`~~ (v0.16.0, partial) — both
    verified end-to-end over real HTTP against a local mock implementing their documented contracts (see
    above); live smoke tests against their *actual* endpoints still need real credentials and remain

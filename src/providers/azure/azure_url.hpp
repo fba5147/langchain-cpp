@@ -14,4 +14,9 @@ inline std::string build_azure_chat_completions_url(const std::string& endpoint,
     return endpoint + "/openai/deployments/" + deployment + "/chat/completions?api-version=" + api_version;
 }
 
+inline std::string build_azure_embeddings_url(const std::string& endpoint, const std::string& deployment,
+                                                const std::string& api_version) {
+    return endpoint + "/openai/deployments/" + deployment + "/embeddings?api-version=" + api_version;
+}
+
 } // namespace langchain::providers::detail

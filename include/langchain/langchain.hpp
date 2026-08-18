@@ -33,6 +33,7 @@
 
 #include "langchain/mcp/mcp_client.hpp"
 #include "langchain/mcp/mcp_server.hpp"
+#include "langchain/mcp/mcp_http_server.hpp"
 #include "langchain/mcp/mcp_tools.hpp"
 
 #include "langchain/parsers/json_parser.hpp"
@@ -60,6 +61,8 @@
 #include "langchain/rag/embeddings/embeddings.hpp"
 #include "langchain/rag/embeddings/mock_embeddings.hpp"
 #include "langchain/rag/embeddings/openai_embeddings.hpp"
+#include "langchain/rag/embeddings/azure_openai_embeddings.hpp"
+#include "langchain/rag/embeddings/gemini_embeddings.hpp"
 #include "langchain/rag/format_documents.hpp"
 #include "langchain/rag/loaders/csv_loader.hpp"
 #include "langchain/rag/loaders/loader.hpp"

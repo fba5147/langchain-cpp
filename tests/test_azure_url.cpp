@@ -12,3 +12,11 @@ TEST(BuildAzureChatCompletionsUrl, ComposesExpectedPath) {
               "https://my-resource.openai.azure.com/openai/deployments/gpt4-deployment/chat/completions"
               "?api-version=2024-06-01");
 }
+
+TEST(BuildAzureEmbeddingsUrl, ComposesExpectedPath) {
+    auto url = build_azure_embeddings_url("https://my-resource.openai.azure.com", "embed-deployment", "2024-06-01");
+
+    EXPECT_EQ(url,
+              "https://my-resource.openai.azure.com/openai/deployments/embed-deployment/embeddings"
+              "?api-version=2024-06-01");
+}

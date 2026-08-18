@@ -103,8 +103,11 @@ add_library(langchain_core
     src/mcp/jsonrpc.cpp
     src/mcp/mcp_protocol.cpp
     src/mcp/stdio_transport.cpp
+    src/mcp/stdio_client_transport.cpp
+    src/mcp/http_client_transport.cpp
     src/mcp/mcp_client.cpp
     src/mcp/mcp_server.cpp
+    src/mcp/mcp_http_server.cpp
     src/mcp/mcp_tools.cpp
     src/parsers/json_parser.cpp
     src/tools/function_tool.cpp
@@ -114,7 +117,11 @@ add_library(langchain_core
     src/rag/loaders/markdown_loader.cpp
     src/rag/splitters/recursive_character_text_splitter.cpp
     src/rag/embeddings/mock_embeddings.cpp
+    src/rag/embeddings/openai_embeddings_wire_format.cpp
     src/rag/embeddings/openai_embeddings.cpp
+    src/rag/embeddings/azure_openai_embeddings.cpp
+    src/rag/embeddings/gemini_embeddings_wire_format.cpp
+    src/rag/embeddings/gemini_embeddings.cpp
     src/rag/vectorstores/vector_store.cpp
     src/rag/vectorstores/in_memory_vector_store.cpp
     src/rag/vectorstores/faiss_vector_store.cpp

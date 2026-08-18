@@ -34,6 +34,10 @@ struct MockHttpResponse {
     int status = 200;
     std::string body;
     std::string content_type = "application/json";
+    // Extra response headers beyond Content-Type/Content-Length/Connection
+    // (which the server always sets itself) -- e.g. Mcp-Session-Id for the
+    // MCP Streamable HTTP contract tests.
+    std::map<std::string, std::string> extra_headers;
 };
 
 class MockHttpServer {

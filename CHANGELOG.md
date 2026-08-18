@@ -4,6 +4,78 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet follow strict
 semantic versioning (pre-1.0, breaking changes can land in a minor bump).
 
+## [0.21.0] — MCP Streamable HTTP transport
+
+Closes the last open item under Part 9 of the roadmap-item-6 gap list: `McpClient`/`McpServer` previously
+only spoke stdio.
+
+- `mcp::McpClient(McpHttpConfig{url})` — a second constructor connecting to a remote MCP server over
+  "Streamable HTTP" (the transport that replaced the older separate HTTP+SSE transport in MCP's
+  2025-03-26 spec revision) instead of spawning a local subprocess. Sends each JSON-RPC message as its
+  own HTTP POST with `Accept: application/json, text/event-stream` and an `MCP-Protocol-Version` header;
+  handles both response shapes the spec allows (`Content-Type: application/json`, or an SSE-framed
+  `text/event-stream` body — real servers, including the official reference server, use the latter even
+  for plain request/response exchanges); captures the `Mcp-Session-Id` header from the initialize
+  response and echoes it back on every later request. Internally, `McpClient` now dispatches through a
+  `detail::ClientTransport` interface with two implementations — `StdioClientTransport` (the previous
+  logic, extracted unchanged) and the new `HttpClientTransport` — rather than being hardcoded to stdio.
+- `mcp::McpHttpServer` — the server-side mirror: serves a `ToolRegistry` over the same transport, binding
+  to `127.0.0.1` by default (per the spec's DNS-rebinding guidance) and rejecting requests whose `Origin`
+  header names anything other than a `localhost`/`127.0.0.1` origin. Always answers with a single
+  `application/json` response rather than opening an SSE stream — fully spec-compliant (the spec allows
+  either), and simpler, since this server never needs to push more than one message per request.
+  `McpServer`'s request dispatch was extracted into `handle_message()`, now shared by both the stdio
+  `serve()` loop and `McpHttpServer`, so the two transports can't drift in how they interpret
+  initialize/tools/list/tools/call.
+- Verified against a *real* server on both ends: `McpClient`'s new HTTP transport against `npx
+  @modelcontextprotocol/server-everything streamableHttp` (the same reference server used for stdio, run
+  in its HTTP mode) — confirming the exact request/response shapes via direct `curl` probing before
+  writing the client, not just the spec text — see `examples/mcp_http_client_demo.cpp`; `McpHttpServer`
+  against langchain-cpp's own `McpClient` connecting over a real loopback socket, in
+  `tests/test_mcp_http_server_roundtrip.cpp` (mirrors `test_mcp_server_roundtrip.cpp`'s stdio round trip,
+  but over actual HTTP rather than a subprocess).
+- Not implemented, both spec-optional (`MAY`): session-ID *issuance* on `McpHttpServer` (it never assigns
+  one) and SSE resumability/redelivery (`Last-Event-ID`) on either side — neither was needed for this
+  project's own client/server pair or the reference server it was verified against.
+- 16 new tests (7 pure SSE-event-data-extraction, 4 `McpHttpClientLiveContract` against a mock server, 5
+  `McpHttpServerRoundtrip` against a real in-process `McpHttpServer`), plus `tests/support/
+  mock_http_server.hpp` gained an `extra_headers` field on `MockHttpResponse` (needed to simulate
+  `Mcp-Session-Id` response headers in the client-side mock tests) that other providers' contract tests
+  can reuse too.
+
+## [0.20.0] — Azure OpenAI and Gemini embeddings
+
+Closes out Part 10 of the roadmap-item-6 gap list (integration breadth): the last open item was more
+embeddings providers.
+
+- `rag::AzureOpenAIEmbeddings` — talks to an Azure OpenAI embeddings deployment. Request/response body
+  shape is identical to `OpenAIEmbeddings`'s, so both now share `src/rag/embeddings/
+  openai_embeddings_wire_format.hpp/.cpp` (newly extracted from `OpenAIEmbeddings`'s previously-inline
+  body-building/response-parsing logic, kept pure and separately unit tested); only the deployment-based
+  URL (`build_azure_embeddings_url`, alongside the existing `build_azure_chat_completions_url` in
+  `azure_url.hpp`) and the `api-key` header differ, same relationship as `AzureOpenAIChat`/`OpenAIChat`.
+- `rag::GeminiEmbeddings` — talks to Google's Gemini embeddings API (`embedContent` for `embed_query`,
+  `batchEmbedContents` for `embed_documents`). Verified against Google's current docs while writing this
+  (not just training-data recall): `taskType`/`outputDimensionality` now nest under an
+  `embedContentConfig` object — the older top-level placement is deprecated — and each
+  `batchEmbedContents` request entry must repeat the model as `"models/{model}"` even though the URL
+  already names it. `embed_query` uses `taskType: RETRIEVAL_QUERY` and `embed_documents` uses
+  `RETRIEVAL_DOCUMENT` — a real instance of the query/document embedding distinction the `Embeddings`
+  base interface was designed to support, not just theoretical. Defaults to `gemini-embedding-001`
+  rather than the newer `gemini-embedding-2`, since the latter dropped `taskType` support in favor of
+  folding task instructions into the prompt text — not a drop-in replacement here.
+- Both new providers verified via the existing local mock-HTTP-server contract-test harness (`tests/
+  support/mock_http_server.hpp`), same approach used for `AnthropicChat`/`GeminiChat`, since neither
+  `AZURE_OPENAI_API_KEY` nor `GOOGLE_API_KEY` is available in this environment: proves each client
+  builds the documented URL/headers/body and parses the documented response shape correctly, not that
+  the real endpoint behaves as documented.
+- `examples/more_providers_demo.cpp` gains two more sections (skipping cleanly when credentials aren't
+  configured, like the rest of the file).
+- 15 new tests (1 Azure embeddings URL, 3 shared OpenAI-embeddings wire format, 4 Gemini-embeddings wire
+  format, 4 Azure OpenAI Embeddings live-contract, 3 Gemini Embeddings live-contract). `OpenAIEmbeddings`
+  itself had no dedicated tests before this — it's now covered indirectly through the wire-format tests,
+  since its body-building/response-parsing logic is exactly what those exercise.
+
 ## [0.19.0] — pgvector, CSV/web loaders
 
 Completes Part 10 of the roadmap-item-6 gap list (integration breadth), aside from more embeddings

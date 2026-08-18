@@ -41,7 +41,9 @@ qdrant/qdrant`) and `pgvector_demo` needs a real Postgres+pgvector server (`dock
 POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16`, then `CREATE EXTENSION IF NOT EXISTS vector;`), but
 both otherwise run offline (`MockEmbeddings`). `mcp_server_demo` isn't meant to be run directly at all —
 it speaks stdio JSON-RPC, not a human-typed REPL; it's spawned by an MCP client (see
-`tests/test_mcp_server_roundtrip.cpp`).
+`tests/test_mcp_server_roundtrip.cpp`). `mcp_http_client_demo` needs a real Streamable HTTP MCP server
+already running (`npx -y @modelcontextprotocol/server-everything streamableHttp`, listening on
+`localhost:3001` by default).
 
 `tests/test_qdrant_vector_store_live.cpp`/`tests/test_pgvector_store_live.cpp` follow the same pattern
 as the mock-server contract tests below, but against a *real* dependency instead of a mock: they
@@ -57,12 +59,13 @@ but exercise the real round trip end-to-end when it is.
 - If you touch a provider's wire-format code, sanity check it beyond `MockChat`-only unit tests, which
   won't catch real wire-format bugs. For `OpenAIChat`/`AzureOpenAIChat`/`OpenAIEmbeddings`, an
   OpenAI-compatible local server via Ollama is a free, fast way to do this — see
-  `examples/ollama_demo.cpp`. For `AnthropicChat`/`GeminiChat`, where no local server speaks their wire
-  format, run (and extend, if your change touches new request/response shapes)
-  `tests/test_anthropic_chat_live_contract.cpp`/`tests/test_gemini_chat_live_contract.cpp` — these spin
-  up a local mock server (`tests/support/mock_http_server.hpp`) implementing the documented contract and
-  exercise the real HTTP layer against it. If you have real Anthropic/Google credentials, testing
-  against the actual endpoint too is even more valuable (see the "Where to help" note on this below).
+  `examples/ollama_demo.cpp`. For `AnthropicChat`/`GeminiChat`/`AzureOpenAIEmbeddings`/
+  `GeminiEmbeddings`, where no local server speaks their wire format, run (and extend, if your change
+  touches new request/response shapes) the corresponding `tests/test_*_live_contract.cpp` file — these
+  spin up a local mock server (`tests/support/mock_http_server.hpp`) implementing the documented contract
+  and exercise the real HTTP layer against it. If you have real Anthropic/Google/Azure credentials,
+  testing against the actual endpoint too is even more valuable (see the "Where to help" note on this
+  below).
 - Keep commits and PRs scoped to one change; separate refactors from behavior changes.
 
 ## Code conventions
@@ -90,12 +93,11 @@ Roadmap item 6 (README) is a lettered list of gaps identified against official L
 (Python)/LangChain.js; parts 1 (`RunnableParallel`/`RunnablePassthrough`/`RunnableBranch`), 2
 (`ChatModel::stream()`), 3 (callbacks), 4 (`CachingChatModel`), 5 (`ChatModelWithHistory`), 6 (few-shot
 prompting/`OutputFixingParser`), 7 (`RateLimiter`/`RateLimitedChatModel`), 8 (`Message::images`), and 9
-(`mcp::McpClient` + `mcp::McpServer`) are done. Part 10 (integration breadth) is essentially done too
-(`FaissVectorStore`, `QdrantVectorStore`, `PgVectorStore`, `PdfLoader`, `CsvLoader`, `WebLoader`);
-concrete things worth doing, roughly in priority order:
+(`mcp::McpClient` + `mcp::McpServer`, including both stdio and Streamable HTTP transports) are done.
+Part 10 (integration breadth) is done
+(`FaissVectorStore`, `QdrantVectorStore`, `PgVectorStore`, `PdfLoader`, `CsvLoader`, `WebLoader`,
+`AzureOpenAIEmbeddings`, `GeminiEmbeddings`); concrete things worth doing, roughly in priority order:
 
-- **More embeddings providers** (part 10) — the last open item in integration breadth; the official
-  libs' partner-package model (Cohere, HuggingFace, etc.), at a much smaller scale here.
 - **Split `langchain_core` into multiple library targets** — adding FAISS/poppler-cpp as dependencies of
   the single monolithic `langchain_core` static library means every consumer (every example, the
   benchmark binary) now links `libfaiss`/`libpoppler-cpp` and pays their dynamic-linker load cost at
@@ -104,8 +106,11 @@ concrete things worth doing, roughly in priority order:
   PRIVATE ...)` doesn't fix this for a *static* library (CMake still propagates link libraries to
   consumers regardless of the keyword); actually fixing it means splitting optional-dependency features
   into their own linkable targets that consumers opt into.
-- **An HTTP/SSE transport for MCP** — both `McpClient` and `McpServer` (part 9) only speak stdio today
-  (the common case for local servers); a remote/HTTP transport is a natural, separable follow-up.
+- **MCP session-ID issuance on `McpHttpServer`, and SSE resumability on either side of the HTTP
+  transport** (part 9) — both are spec-optional (`MAY`) and weren't needed for this project's own
+  client/server pair or the reference server it was verified against, but a real gap if you need a
+  server that pushes unsolicited messages to clients (session tracking) or a client that survives a
+  dropped mid-stream connection (the `Last-Event-ID` redelivery mechanism).
 - **A LangSmith-equivalent tracing backend** — part 3 shipped the hook points
   (`CallbackHandler`/`CallbackManager`/`CallbackingChatModel`/`CallbackingTool`) and a console printer,
   but nothing that persists/visualizes traces. A `CallbackHandler` that writes structured JSON lines

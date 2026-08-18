@@ -17,6 +17,8 @@ add_executable(langchain_tests
     test_openai_message_wire_format.cpp
     test_anthropic_wire_format.cpp
     test_azure_url.cpp
+    test_openai_embeddings_wire_format.cpp
+    test_gemini_embeddings_wire_format.cpp
     test_format_documents.cpp
     test_openai_stream_parser.cpp
     test_callbacks.cpp
@@ -28,11 +30,15 @@ add_executable(langchain_tests
     test_rate_limiter.cpp
     test_mcp_jsonrpc.cpp
     test_mcp_stdio_transport.cpp
+    test_mcp_http_client_transport.cpp
     test_faiss_vector_store.cpp
     test_pdf_loader.cpp
     support/mock_http_server.cpp
     test_anthropic_chat_live_contract.cpp
     test_gemini_chat_live_contract.cpp
+    test_azure_openai_embeddings_live_contract.cpp
+    test_gemini_embeddings_live_contract.cpp
+    test_mcp_http_client_live_contract.cpp
     test_qdrant_wire_format.cpp
     test_qdrant_vector_store_live.cpp
     test_pgvector_sql.cpp
@@ -47,6 +53,7 @@ if(TARGET mcp_server_demo)
     target_sources(langchain_tests PRIVATE test_mcp_server_roundtrip.cpp)
     target_compile_definitions(langchain_tests PRIVATE MCP_SERVER_DEMO_PATH="$<TARGET_FILE:mcp_server_demo>")
 endif()
+target_sources(langchain_tests PRIVATE test_mcp_http_server_roundtrip.cpp)
 
 # PostgreSQL::PostgreSQL is linked PRIVATE by langchain_core, so its
 # include directories (needed by test_pgvector_store_live.cpp's direct
